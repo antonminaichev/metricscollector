@@ -20,6 +20,7 @@ func run() error {
 		Counter: make(map[string]int64),
 	}
 	mux := http.NewServeMux()
+	mux.HandleFunc("/health", h.HealthCheck)
 	mux.HandleFunc("/update/", func(w http.ResponseWriter, r *http.Request) {
 		h.PostMetric(w, r, storage)
 	})

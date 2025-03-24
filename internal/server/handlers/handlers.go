@@ -9,17 +9,17 @@ import (
 )
 
 // PostMetric handler is used for adding new metric to MemStorage
-func PostMetric(w http.ResponseWriter, r *http.Request, storage *ms.MemStorage) {
+func PostMetric(rw http.ResponseWriter, r *http.Request, storage *ms.MemStorage) {
 	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		rw.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	w.Header().Set("Content-Type", "text/plain")
+	rw.Header().Set("Content-Type", "text/plain")
 
 	segments := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 
 	if len(segments) < 4 {
-		w.WriteHeader(http.StatusNotFound)
+		rw.WriteHeader(http.StatusNotFound)
 		return
 	}
 
@@ -28,7 +28,7 @@ func PostMetric(w http.ResponseWriter, r *http.Request, storage *ms.MemStorage) 
 	metricValue := segments[3]
 
 	if metricName == "" {
-		w.WriteHeader(http.StatusNotFound)
+		rw.WriteHeader(http.StatusNotFound)
 		return
 	}
 
@@ -36,21 +36,33 @@ func PostMetric(w http.ResponseWriter, r *http.Request, storage *ms.MemStorage) 
 	case "counter":
 		v, err := strconv.ParseInt(metricValue, 10, 64)
 		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
+			rw.WriteHeader(http.StatusBadRequest)
 			return
 		}
 		storage.UpdateCounter(metricName, v)
 	case "gauge":
 		v, err := strconv.ParseFloat(metricValue, 64)
 		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
+			rw.WriteHeader(http.StatusBadRequest)
 			return
 		}
 		storage.UpdateGauge(metricName, v)
 	default:
-		w.WriteHeader(http.StatusBadRequest)
+		rw.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
+	rw.WriteHeader(http.StatusOK)
+}
+
+// Health Check is used for checking server availability
+func HealthCheck(rw http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	rw.Header().Set("Content-Type", "application/json")
+	rw.WriteHeader(http.StatusOK)
+	rw.Write([]byte(`{"status": "ok"}`))
 }
