@@ -46,6 +46,7 @@ func TestHealthCheck(t *testing.T) {
 		resp, get := testRequest(t, ts, "GET", v.url)
 		assert.Equal(t, v.status, resp.StatusCode)
 		assert.Equal(t, v.want, get)
+		resp.Body.Close()
 	}
 }
 
@@ -99,6 +100,7 @@ func TestPostMetric(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			resp, _ := testRequest(t, ts, http.MethodPost, tt.url)
 			assert.Equal(t, tt.want, resp.StatusCode)
+			resp.Body.Close()
 
 			if resp.StatusCode == http.StatusOK {
 				switch tt.metricType {
@@ -168,7 +170,7 @@ func TestGetMetric(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			resp, body := testRequest(t, ts, http.MethodGet, tt.url)
 			assert.Equal(t, tt.want, resp.StatusCode)
-
+			resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
 				switch tt.metricType {
 				case "counter":
@@ -195,6 +197,7 @@ func TestPrintAllMetrics(t *testing.T) {
 
 	resp, body := testRequest(t, ts, http.MethodGet, "/")
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	resp.Body.Close()
 	assert.Contains(t, body, "testCounter")
 	assert.Contains(t, body, "52")
 	assert.Contains(t, body, "testGauge")
