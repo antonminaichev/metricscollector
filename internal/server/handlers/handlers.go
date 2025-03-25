@@ -58,7 +58,7 @@ func GetMetric(rw http.ResponseWriter, r *http.Request, storage *ms.MemStorage) 
 		if !ok {
 			http.Error(rw, "No such gauge metric "+metricName, http.StatusNotFound)
 		}
-		io.WriteString(rw, strconv.FormatFloat(value, 'f', 4, 64))
+		io.WriteString(rw, strconv.FormatFloat(value, 'f', 3, 64))
 	case "counter":
 		metrics := storage.GetCounter()
 		value, ok := metrics[metricName]
