@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	ms "github.com/antonminaichev/metricscollector/internal/server/memstorage"
@@ -11,144 +12,191 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type want struct {
-	responseCode int
-	responseBody string
-	contentType  string
-	storage      *ms.MemStorage
+func testRequest(t *testing.T, ts *httptest.Server, method,
+	path string) (*http.Response, string) {
+	req, err := http.NewRequest(method, ts.URL+path, nil)
+	require.NoError(t, err)
+
+	resp, err := ts.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	return resp, string(respBody)
 }
 
 func TestHealthCheck(t *testing.T) {
-	type want struct {
-		responseCode int
-		responseBody string
-		contentType  string
+	storage := &ms.MemStorage{
+		Gauge:   make(map[string]float64),
+		Counter: make(map[string]int64),
 	}
-	tests := []struct {
-		name string
-		want want
+	ts := httptest.NewServer(MetricRouter(storage))
+	defer ts.Close()
+	var testTable = []struct {
+		url    string
+		want   string
+		status int
 	}{
-		{
-			name: "Health check",
-			want: want{
-				responseCode: http.StatusOK,
-				responseBody: `{"status": "ok"}`,
-				contentType:  "application/json",
-			},
-		},
+		{"/health", `{"status": "ok"}`, http.StatusOK},
+		{"/health1", "404 page not found\n", http.StatusNotFound},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodGet, "/health", nil)
-			w := httptest.NewRecorder()
-			HealthCheck(w, request)
-
-			res := w.Result()
-			assert.Equal(t, tt.want.responseCode, res.StatusCode)
-			defer res.Body.Close()
-			resBody, err := io.ReadAll(res.Body)
-			require.NoError(t, err)
-			assert.JSONEq(t, tt.want.responseBody, string(resBody))
-			assert.Equal(t, tt.want.contentType, res.Header.Get("Content-Type"))
-		})
+	for _, v := range testTable {
+		resp, get := testRequest(t, ts, "GET", v.url)
+		assert.Equal(t, v.status, resp.StatusCode)
+		assert.Equal(t, v.want, get)
 	}
 }
 
 func TestPostMetric(t *testing.T) {
-	type want struct {
-		responseCode int
-		contentType  string
-		storage      *ms.MemStorage
+	storage := &ms.MemStorage{
+		Gauge:   make(map[string]float64),
+		Counter: make(map[string]int64),
 	}
-	tests := []struct {
-		name string
-		url  string
-		want want
+	ts := httptest.NewServer(MetricRouter(storage))
+	defer ts.Close()
+
+	testTable := []struct {
+		name       string
+		url        string
+		want       int
+		metricType string
+		value      interface{}
 	}{
 		{
-			name: "Post metric counter positive",
-			url:  "/update/counter/test/1",
-			want: want{
-				responseCode: http.StatusOK,
-				contentType:  "text/plain",
-				storage: &ms.MemStorage{
-					Counter: map[string]int64{
-						"test": 1,
-					},
-				},
-			},
+			name:       "Positive counter",
+			url:        "/update/counter/testCounter/100",
+			want:       http.StatusOK,
+			metricType: "counter",
+			value:      int64(100),
 		},
 		{
-			name: "Post metric gauge positive",
-			url:  "/update/gauge/test/1.543",
-			want: want{
-				responseCode: http.StatusOK,
-				contentType:  "text/plain",
-				storage: &ms.MemStorage{
-					Gauge: map[string]float64{
-						"test": 1.543,
-					},
-				},
-			},
+			name:       "Positive gauge",
+			url:        "/update/gauge/testGauge/123.45",
+			want:       http.StatusOK,
+			metricType: "gauge",
+			value:      float64(123.45),
 		},
 		{
-			name: "Incorrect counter value",
-			url:  "/update/counter/test/abc",
-			want: want{
-				responseCode: http.StatusBadRequest,
-				contentType:  "text/plain",
-				storage:      &ms.MemStorage{},
-			},
+			name: "Incorrect metric type",
+			url:  "/update/unknown/testMetric/100",
+			want: http.StatusBadRequest,
 		},
 		{
-			name: "Incorrect gauge value",
-			url:  "/update/gauge/test/abc",
-			want: want{
-				responseCode: http.StatusBadRequest,
-				contentType:  "text/plain",
-				storage:      &ms.MemStorage{},
-			},
+			name: "Incorrect value counter",
+			url:  "/update/counter/testCounter/abc",
+			want: http.StatusBadRequest,
 		},
 		{
-			name: "Post metric bad url",
-			url:  "/test",
-			want: want{
-				responseCode: http.StatusNotFound,
-				contentType:  "text/plain",
-				storage:      &ms.MemStorage{},
-			},
-		},
-		{
-			name: "Post metric incorrect metric type",
-			url:  "/update/test/test/22",
-			want: want{
-				responseCode: http.StatusBadRequest,
-				contentType:  "text/plain",
-				storage:      &ms.MemStorage{},
-			},
-		},
-		{
-			name: "Post metric without metric name",
-			url:  "/update/gauge//1.543",
-			want: want{
-				responseCode: http.StatusNotFound,
-				contentType:  "text/plain",
-				storage:      &ms.MemStorage{},
-			},
+			name: "Incorrect value gauge",
+			url:  "/update/gauge/testGauge/abc",
+			want: http.StatusBadRequest,
 		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodPost, tt.url, nil)
-			w := httptest.NewRecorder()
-			PostMetric(w, request, tt.want.storage)
 
-			res := w.Result()
-			assert.Equal(t, tt.want.responseCode, res.StatusCode)
-			defer res.Body.Close()
-			_, err := io.ReadAll(res.Body)
-			require.NoError(t, err)
-			assert.Equal(t, tt.want.contentType, res.Header.Get("Content-Type"))
+	for _, tt := range testTable {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, _ := testRequest(t, ts, http.MethodPost, tt.url)
+			assert.Equal(t, tt.want, resp.StatusCode)
+
+			if resp.StatusCode == http.StatusOK {
+				switch tt.metricType {
+				case "counter":
+					value := storage.GetCounter()["testCounter"]
+					assert.Equal(t, tt.value, value)
+				case "gauge":
+					value := storage.GetGauge()["testGauge"]
+					assert.Equal(t, tt.value, value)
+				}
+			}
 		})
 	}
+}
+
+func TestGetMetric(t *testing.T) {
+	storage := &ms.MemStorage{
+		Gauge:   make(map[string]float64),
+		Counter: make(map[string]int64),
+	}
+
+	storage.UpdateGauge("testGauge", 123.45)
+	storage.UpdateCounter("testCounter", 100)
+
+	ts := httptest.NewServer(MetricRouter(storage))
+	defer ts.Close()
+
+	testTable := []struct {
+		name       string
+		url        string
+		want       int
+		metricType string
+		value      interface{}
+	}{
+		{
+			name:       "Positive counter",
+			url:        "/value/counter/testCounter",
+			want:       http.StatusOK,
+			metricType: "counter",
+			value:      int64(100),
+		},
+		{
+			name:       "Positive gauge",
+			url:        "/value/gauge/testGauge",
+			want:       http.StatusOK,
+			metricType: "gauge",
+			value:      float64(123.45),
+		},
+		{
+			name: "Incorrect metric type",
+			url:  "/value/unknown/testMetric",
+			want: http.StatusNotFound,
+		},
+		{
+			name: "Counter metric not found",
+			url:  "/value/counter/nonexistent",
+			want: http.StatusNotFound,
+		},
+		{
+			name: "Gauge metric not found",
+			url:  "/value/gauge/nonexistent",
+			want: http.StatusNotFound,
+		},
+	}
+
+	for _, tt := range testTable {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, body := testRequest(t, ts, http.MethodGet, tt.url)
+			assert.Equal(t, tt.want, resp.StatusCode)
+
+			if resp.StatusCode == http.StatusOK {
+				switch tt.metricType {
+				case "counter":
+					value, _ := strconv.ParseInt(body, 10, 64)
+					assert.Equal(t, tt.value, value)
+				case "gauge":
+					value, _ := strconv.ParseFloat(body, 64)
+					assert.Equal(t, tt.value, value)
+				}
+			}
+		})
+	}
+}
+func TestPrintAllMetrics(t *testing.T) {
+	storage := &ms.MemStorage{
+		Gauge:   make(map[string]float64),
+		Counter: make(map[string]int64),
+	}
+	ts := httptest.NewServer(MetricRouter(storage))
+	defer ts.Close()
+
+	storage.UpdateCounter("testCounter", 52)
+	storage.UpdateGauge("testGauge", 5432.21234)
+
+	resp, body := testRequest(t, ts, http.MethodGet, "/")
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Contains(t, body, "testCounter")
+	assert.Contains(t, body, "52")
+	assert.Contains(t, body, "testGauge")
+	assert.Contains(t, body, "5432.21234")
 }

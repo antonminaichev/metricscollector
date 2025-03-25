@@ -132,7 +132,7 @@ func TestUpdateGauge(t *testing.T) {
 	}
 }
 
-func TestMemStorage_GetCounter(t *testing.T) {
+func TestMemStorageGetCounter(t *testing.T) {
 	tests := []struct {
 		name    string
 		storage *MemStorage
@@ -156,7 +156,7 @@ func TestMemStorage_GetCounter(t *testing.T) {
 	}
 }
 
-func TestMemStorage_GetGauge(t *testing.T) {
+func TestMemStorageGetGauge(t *testing.T) {
 	tests := []struct {
 		name    string
 		storage *MemStorage

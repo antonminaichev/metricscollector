@@ -1,5 +1,7 @@
 package memstorage
 
+import "fmt"
+
 // MetricStorager interface defines metods for MemStorage type.
 type MemStorager interface {
 	UpdateCounter(name string, value int64) error
@@ -32,4 +34,17 @@ func (storage *MemStorage) GetCounter() map[string]int64 {
 // GetGauge returns map of gauge metrics.
 func (storage *MemStorage) GetGauge() map[string]float64 {
 	return storage.Gauge
+}
+
+func (storage *MemStorage) PrintAllMetrics() string {
+	var allMetrics string
+	allMetrics = "Counter metrics\n"
+	for k, v := range storage.Counter {
+		allMetrics += fmt.Sprintf("%s : %v\n", k, v)
+	}
+	allMetrics += "Gauge metrics\n"
+	for k, v := range storage.Gauge {
+		allMetrics += fmt.Sprintf("%s : %v\n", k, v)
+	}
+	return allMetrics
 }
