@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"reflect"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -49,6 +50,10 @@ var actualMetrics Metrics
 
 // checkServerAvailability is used for checking server availability
 func checkServerAvailability(host string) bool {
+	// Добавляем протокол http:// если его нет
+	if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {
+		host = "http://" + host
+	}
 	resp, err := http.Get(host + "/health")
 	if err != nil {
 		log.Printf("Something went wrong: %v", err)
@@ -105,6 +110,11 @@ func CollectMetrics(pollinterval int) {
 func PostMetric(client *http.Client, reportInterval int, host string) {
 	log.Printf("Report Interval: %d sec", reportInterval)
 	log.Printf("Host: %s", host)
+
+	// Добавляем протокол http:// если его нет
+	if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {
+		host = "http://" + host
+	}
 
 	for !checkServerAvailability(host) {
 		log.Printf("Server unreachable, retry in 5 seconds...")

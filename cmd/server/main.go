@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/antonminaichev/metricscollector/internal/server/handlers"
@@ -8,6 +9,10 @@ import (
 )
 
 func main() {
+	if err := parseFlags(); err != nil {
+		fmt.Printf("Error parsing flags: %v\n", err)
+		return
+	}
 	if err := run(); err != nil {
 		panic(err)
 	}
@@ -19,5 +24,5 @@ func run() error {
 		Gauge:   make(map[string]float64),
 		Counter: make(map[string]int64),
 	}
-	return http.ListenAndServe(`:8080`, handlers.MetricRouter(storage))
+	return http.ListenAndServe(flagRunAddr, handlers.MetricRouter(storage))
 }

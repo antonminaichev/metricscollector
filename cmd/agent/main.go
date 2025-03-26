@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -11,12 +12,16 @@ import (
 )
 
 func main() {
-	if err := run(2, 10, "http://localhost:8080"); err != nil {
+	if err := parseFlags(); err != nil {
+		fmt.Printf("Error parsing flags: %v\n", err)
+		return
+	}
+	if err := run(); err != nil {
 		panic(err)
 	}
 }
 
-func run(pollinterval int, reportInterval int, host string) error {
+func run() error {
 	client := &http.Client{}
 
 	// Создаем канал для сигналов завершения
@@ -24,8 +29,8 @@ func run(pollinterval int, reportInterval int, host string) error {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	// Запускаем функции параллельно
-	go agent.CollectMetrics(pollinterval)
-	go agent.PostMetric(client, reportInterval, host)
+	go agent.CollectMetrics(flagPollInterval)
+	go agent.PostMetric(client, flagReportInterval, flagRunAddr)
 
 	// Ждем сигнала завершения
 	<-sigChan
