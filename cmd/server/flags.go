@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
 )
 
 var flagRunAddr string
@@ -14,5 +15,8 @@ func parseFlags() error {
 		return fmt.Errorf("unknown flags: %v", flag.Args())
 	}
 
+	if envRunAddr := os.Getenv("ADDRESS"); envRunAddr != "" {
+		flagRunAddr = envRunAddr
+	}
 	return nil
 }
