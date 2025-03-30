@@ -17,7 +17,7 @@ set SERVER_PID=%ERRORLEVEL%
 timeout /t 2
 
 :: Запускаем агента в отдельном окне
-start "Agent" cmd /k ".\cmd\agent\agent.exe -a=localhost:8080 -r=10 -p=2"
+start "Agent" cmd /k ".\cmd\agent\agent.exe -a=http://localhost:8080 -r=10 -p=2"
 set AGENT_PID=%ERRORLEVEL%
 
 echo Server and Agent are running...

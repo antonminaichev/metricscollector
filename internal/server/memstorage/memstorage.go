@@ -2,14 +2,6 @@ package memstorage
 
 import "fmt"
 
-// MetricStorager interface defines metods for MemStorage type.
-type MemStorager interface {
-	UpdateCounter(name string, value int64) error
-	UpdateGauge(name string, value float64) error
-	GetCounter() map[string]int64
-	GetGauge() map[string]float64
-}
-
 // MemStorage is a type struct for counter and gauge metrics. MemStorage shoud implement MemStorager interface.
 type MemStorage struct {
 	Counter map[string]int64

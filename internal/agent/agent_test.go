@@ -14,56 +14,66 @@ func TestCollectMetrics(t *testing.T) {
 	tests := []struct {
 		name           string
 		pollInterval   int
-		expectedChecks func(t *testing.T, metrics Metrics)
+		expectedChecks func(t *testing.T, metrics []Metric)
 	}{
 		{
 			name:         "Сбор всех метрик",
 			pollInterval: 2,
-			expectedChecks: func(t *testing.T, metrics Metrics) {
-				require.NotNil(t, metrics.BuckHashSys, gauge(0))
-				require.NotNil(t, metrics.Frees, gauge(0))
-				require.NotNil(t, metrics.GCCPUFraction)
-				require.NotNil(t, metrics.GCSys, gauge(0))
-				require.NotNil(t, metrics.HeapIdle, gauge(0))
-				require.NotNil(t, metrics.HeapInuse, gauge(0))
-				require.NotNil(t, metrics.HeapObjects, gauge(0))
-				require.NotNil(t, metrics.HeapReleased, gauge(0))
-				require.NotNil(t, metrics.HeapSys, gauge(0))
-				require.NotNil(t, metrics.LastGC, gauge(0))
-				require.NotNil(t, metrics.Lookups, gauge(0))
-				require.NotNil(t, metrics.MCacheInuse, gauge(0))
-				require.NotNil(t, metrics.MCacheSys, gauge(0))
-				require.NotNil(t, metrics.MSpanInuse, gauge(0))
-				require.NotNil(t, metrics.MSpanSys, gauge(0))
-				require.NotNil(t, metrics.Mallocs, gauge(0))
-				require.NotNil(t, metrics.NextGC, gauge(0))
-				require.NotNil(t, metrics.NumForcedGC, gauge(0))
-				require.NotNil(t, metrics.NumGC, gauge(0))
-				require.NotNil(t, metrics.OtherSys, gauge(0))
-				require.NotNil(t, metrics.PauseTotalNs, gauge(0))
-				require.NotNil(t, metrics.StackInuse, gauge(0))
-				require.NotNil(t, metrics.StackSys, gauge(0))
-				require.NotNil(t, metrics.Sys, gauge(0))
-				require.NotNil(t, metrics.TotalAlloc, gauge(0))
-				require.Greater(t, metrics.PollCount, counter(0))
-				require.Greater(t, metrics.HeapAlloc, gauge(0))
-				require.Greater(t, metrics.Alloc, gauge(0))
-				require.GreaterOrEqual(t, metrics.RandomValue, gauge(0))
-				require.LessOrEqual(t, metrics.RandomValue, gauge(1))
+			expectedChecks: func(t *testing.T, metrics []Metric) {
+				findMetric := func(name string) *Metric {
+					for i := range metrics {
+						if metrics[i].name == name {
+							return &metrics[i]
+						}
+					}
+					return nil
+				}
+
+				for _, name := range []string{
+					"BuckHashSys", "Frees", "GCCPUFraction", "GCSys",
+					"HeapIdle", "HeapInuse", "HeapObjects", "HeapReleased",
+					"HeapSys", "LastGC", "Lookups", "MCacheInuse",
+					"MCacheSys", "MSpanInuse", "MSpanSys", "Mallocs",
+					"NextGC", "NumForcedGC", "NumGC", "OtherSys",
+					"PauseTotalNs", "StackInuse", "StackSys", "Sys",
+					"TotalAlloc", "HeapAlloc", "Alloc",
+				} {
+					metric := findMetric(name)
+					require.NotNil(t, metric, "Метрика %s не найдена", name)
+					require.NotNil(t, metric.value, "Значение метрики %s не установлено", name)
+				}
+
+				pollCount := findMetric("PollCount")
+				require.NotNil(t, pollCount)
+				require.Greater(t, pollCount.value.(counter), counter(0))
+
+				randomValue := findMetric("RandomValue")
+				require.NotNil(t, randomValue)
+				require.GreaterOrEqual(t, randomValue.value.(gauge), gauge(0))
+				require.LessOrEqual(t, randomValue.value.(gauge), gauge(1))
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			actualMetrics = Metrics{}
+			// Очищаем значения метрик перед тестом
+			for i := range metrics {
+				switch metrics[i].mtype {
+				case "gauge":
+					metrics[i].value = gauge(0)
+				case "counter":
+					metrics[i].value = counter(0)
+				}
+			}
+
 			done := make(chan bool)
 			go func() {
 				CollectMetrics(tt.pollInterval)
 				done <- true
 			}()
 			time.Sleep(6 * time.Second)
-			tt.expectedChecks(t, actualMetrics)
+			tt.expectedChecks(t, metrics)
 		})
 	}
 }

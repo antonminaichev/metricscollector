@@ -5,12 +5,25 @@ import (
 	"net/http"
 	"strconv"
 
-	ms "github.com/antonminaichev/metricscollector/internal/server/memstorage"
 	"github.com/go-chi/chi"
 )
 
-// PostMetric handler is used for adding new metric to MemStorage
-func PostMetric(rw http.ResponseWriter, r *http.Request, storage *ms.MemStorage) {
+type metricUpdater interface {
+	UpdateCounter(name string, value int64)
+	UpdateGauge(name string, value float64)
+}
+
+type metricGetter interface {
+	GetCounter() map[string]int64
+	GetGauge() map[string]float64
+}
+
+type metricPrinter interface {
+	PrintAllMetrics() string
+}
+
+// PostMetric updates metric value
+func PostMetric(rw http.ResponseWriter, r *http.Request, mu metricUpdater) {
 	if r.Method != http.MethodPost {
 		rw.WriteHeader(http.StatusMethodNotAllowed)
 		return
@@ -32,14 +45,14 @@ func PostMetric(rw http.ResponseWriter, r *http.Request, storage *ms.MemStorage)
 			rw.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		storage.UpdateCounter(metricName, v)
+		mu.UpdateCounter(metricName, v)
 	case "gauge":
 		v, err := strconv.ParseFloat(metricValue, 64)
 		if err != nil {
 			rw.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		storage.UpdateGauge(metricName, v)
+		mu.UpdateGauge(metricName, v)
 	default:
 		rw.WriteHeader(http.StatusBadRequest)
 		return
@@ -48,12 +61,13 @@ func PostMetric(rw http.ResponseWriter, r *http.Request, storage *ms.MemStorage)
 	rw.WriteHeader(http.StatusOK)
 }
 
-func GetMetric(rw http.ResponseWriter, r *http.Request, storage *ms.MemStorage) {
+// GetMetric returns metric value
+func GetMetric(rw http.ResponseWriter, r *http.Request, mg metricGetter) {
 	metricType := chi.URLParam(r, "type")
 	metricName := chi.URLParam(r, "metric")
 	switch metricType {
 	case "gauge":
-		metrics := storage.GetGauge()
+		metrics := mg.GetGauge()
 		value, ok := metrics[metricName]
 		if !ok {
 			http.Error(rw, "No such gauge metric "+metricName, http.StatusNotFound)
@@ -61,7 +75,7 @@ func GetMetric(rw http.ResponseWriter, r *http.Request, storage *ms.MemStorage) 
 		}
 		io.WriteString(rw, strconv.FormatFloat(value, 'f', -1, 64))
 	case "counter":
-		metrics := storage.GetCounter()
+		metrics := mg.GetCounter()
 		value, ok := metrics[metricName]
 		if !ok {
 			http.Error(rw, "No such countermetric "+metricName, http.StatusNotFound)
@@ -72,9 +86,10 @@ func GetMetric(rw http.ResponseWriter, r *http.Request, storage *ms.MemStorage) 
 	}
 }
 
-func PrintAllMetrics(rw http.ResponseWriter, r *http.Request, storage *ms.MemStorage) {
+// PrintAllMetrics prints all metrics
+func PrintAllMetrics(rw http.ResponseWriter, r *http.Request, mp metricPrinter) {
 	rw.Header().Set("Content-Type", "text/html")
-	io.WriteString(rw, storage.PrintAllMetrics())
+	io.WriteString(rw, mp.PrintAllMetrics())
 }
 
 // Health Check is used for checking server availability
@@ -89,19 +104,26 @@ func HealthCheck(rw http.ResponseWriter, r *http.Request) {
 	rw.Write([]byte(`{"status": "ok"}`))
 }
 
-func MetricRouter(storage *ms.MemStorage) chi.Router {
+// MetricRouter is a composite interface for all operations
+type metricStorage interface {
+	metricUpdater
+	metricGetter
+	metricPrinter
+}
+
+func MetricRouter(ms metricStorage) chi.Router {
 	r := chi.NewRouter()
 
 	r.Route("/", func(r chi.Router) {
 		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-			PrintAllMetrics(w, r, storage)
+			PrintAllMetrics(w, r, ms)
 		})
 		r.Get("/health", HealthCheck)
 		r.Get("/value/{type}/{metric}", func(w http.ResponseWriter, r *http.Request) {
-			GetMetric(w, r, storage)
+			GetMetric(w, r, ms)
 		})
 		r.Post("/update/{type}/{metric}/{value}", func(w http.ResponseWriter, r *http.Request) {
-			PostMetric(w, r, storage)
+			PostMetric(w, r, ms)
 		})
 	})
 	return r
