@@ -94,6 +94,9 @@ func CollectMetrics(pollInterval int) {
 
 // PostMetric is used for sending metrics to server
 func PostMetric(client *http.Client, reportInterval int, host string) {
+	if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {
+		host = "http://" + host
+	}
 	log.Printf("Report Interval: %d sec", reportInterval)
 	log.Printf("Host: %s", host)
 

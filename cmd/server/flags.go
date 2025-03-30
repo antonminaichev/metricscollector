@@ -2,21 +2,22 @@ package main
 
 import (
 	"flag"
-	"fmt"
-	"os"
+
+	"github.com/caarlos0/env"
 )
 
-var flagRunAddr string
+type Config struct {
+	Address string `env:"ADDRESS" envDefault:"localhost:8080"`
+}
 
-func parseFlags() error {
-	flag.StringVar(&flagRunAddr, "a", "localhost:8080", "{Host:port} for server")
+func NewConfig() (*Config, error) {
+	cfg := &Config{}
+	if err := env.Parse(cfg); err != nil {
+		return nil, err
+	}
+	address := flag.String("a", cfg.Address, "{Host:port} for server")
 	flag.Parse()
-	if len(flag.Args()) > 0 {
-		return fmt.Errorf("unknown flags: %v", flag.Args())
-	}
+	cfg.Address = *address
 
-	if envRunAddr := os.Getenv("ADDRESS"); envRunAddr != "" {
-		flagRunAddr = envRunAddr
-	}
-	return nil
+	return cfg, nil
 }

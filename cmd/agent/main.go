@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -12,10 +11,6 @@ import (
 )
 
 func main() {
-	if err := parseFlags(); err != nil {
-		fmt.Printf("Error parsing flags: %v\n", err)
-		return
-	}
 	if err := run(); err != nil {
 		panic(err)
 	}
@@ -23,14 +18,17 @@ func main() {
 
 func run() error {
 	client := &http.Client{}
-
+	cfg, err := NewConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
 	// Создаем канал для сигналов завершения
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	// Запускаем функции параллельно
-	go agent.CollectMetrics(flagPollInterval)
-	go agent.PostMetric(client, flagReportInterval, flagRunAddr)
+	go agent.CollectMetrics(cfg.PollInterval)
+	go agent.PostMetric(client, cfg.ReportInterval, cfg.Address)
 
 	// Ждем сигнала завершения
 	<-sigChan
