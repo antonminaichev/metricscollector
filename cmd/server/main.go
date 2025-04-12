@@ -4,8 +4,10 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/antonminaichev/metricscollector/internal/logger"
 	"github.com/antonminaichev/metricscollector/internal/server/handlers"
 	ms "github.com/antonminaichev/metricscollector/internal/server/memstorage"
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -24,5 +26,9 @@ func run() error {
 	if err != nil {
 		log.Fatal(err)
 	}
-	return http.ListenAndServe(cfg.Address, handlers.MetricRouter(storage))
+	if err := logger.Initialize(cfg.LogLevel); err != nil {
+		return err
+	}
+	logger.Log.Info("Running server", zap.String("address", cfg.Address))
+	return http.ListenAndServe(cfg.Address, logger.WithLogging(handlers.MetricRouter(storage)))
 }

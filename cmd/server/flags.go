@@ -7,7 +7,8 @@ import (
 )
 
 type Config struct {
-	Address string `env:"ADDRESS" envDefault:"localhost:8080"`
+	Address  string `env:"ADDRESS" envDefault:"localhost:8080"`
+	LogLevel string `env:"LOG_LEVEL" envDefault:"INFO"`
 }
 
 func NewConfig() (*Config, error) {
@@ -16,8 +17,10 @@ func NewConfig() (*Config, error) {
 		return nil, err
 	}
 	address := flag.String("a", cfg.Address, "{Host:port} for server")
+	loglevel := flag.String("l", cfg.LogLevel, "Log level for server")
 	flag.Parse()
 	cfg.Address = *address
+	cfg.LogLevel = *loglevel
 
 	return cfg, nil
 }

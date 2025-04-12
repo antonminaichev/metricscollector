@@ -89,6 +89,7 @@ func GetMetric(rw http.ResponseWriter, r *http.Request, mg metricGetter) {
 // PrintAllMetrics prints all metrics
 func PrintAllMetrics(rw http.ResponseWriter, r *http.Request, mp metricPrinter) {
 	rw.Header().Set("Content-Type", "text/html")
+	rw.WriteHeader(http.StatusOK)
 	io.WriteString(rw, mp.PrintAllMetrics())
 }
 
