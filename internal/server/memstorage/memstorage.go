@@ -1,0 +1,42 @@
+package memstorage
+
+import "fmt"
+
+// MemStorage is a type struct for counter and gauge metrics. MemStorage shoud implement MemStorager interface.
+type MemStorage struct {
+	Counter map[string]int64
+	Gauge   map[string]float64
+}
+
+// UpdateCounter sum the value of {name} counter metric.
+func (storage *MemStorage) UpdateCounter(name string, value int64) {
+	storage.Counter[name] += value
+}
+
+// UpdateGauge change the value of {name} gauge metric.
+func (storage *MemStorage) UpdateGauge(name string, value float64) {
+	storage.Gauge[name] = value
+}
+
+// GetCounter returns map of counter metrics.
+func (storage *MemStorage) GetCounter() map[string]int64 {
+	return storage.Counter
+}
+
+// GetGauge returns map of gauge metrics.
+func (storage *MemStorage) GetGauge() map[string]float64 {
+	return storage.Gauge
+}
+
+func (storage *MemStorage) PrintAllMetrics() string {
+	var allMetrics string
+	allMetrics = "Counter metrics\n"
+	for k, v := range storage.Counter {
+		allMetrics += fmt.Sprintf("%s : %v\n", k, v)
+	}
+	allMetrics += "Gauge metrics\n"
+	for k, v := range storage.Gauge {
+		allMetrics += fmt.Sprintf("%s : %v\n", k, v)
+	}
+	return allMetrics
+}
