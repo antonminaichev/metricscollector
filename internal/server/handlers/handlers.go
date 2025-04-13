@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"strconv"
@@ -20,6 +21,13 @@ type metricGetter interface {
 
 type metricPrinter interface {
 	PrintAllMetrics() string
+}
+
+type Metrics struct {
+	ID    string   `json:"id"`              // имя метрики
+	MType string   `json:"type"`            // параметр, принимающий значение gauge или counter
+	Delta *int64   `json:"delta,omitempty"` // значение метрики в случае передачи counter
+	Value *float64 `json:"value,omitempty"` // значение метрики в случае передачи gauge
 }
 
 // PostMetric updates metric value
@@ -61,6 +69,103 @@ func PostMetric(rw http.ResponseWriter, r *http.Request, mu metricUpdater) {
 	rw.WriteHeader(http.StatusOK)
 }
 
+// PostMetricJSON updates metric value via JSON request
+func PostMetricJSON(rw http.ResponseWriter, r *http.Request, mu metricUpdater, mg metricGetter) {
+	if r.Method != http.MethodPost {
+		rw.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var metric Metrics
+	if err := json.NewDecoder(r.Body).Decode(&metric); err != nil {
+		http.Error(rw, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var response Metrics
+	response.ID = metric.ID
+	response.MType = metric.MType
+
+	if metric.ID == "" || metric.MType == "" {
+		rw.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	switch metric.MType {
+	case "counter":
+		if metric.Delta == nil {
+			rw.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		mu.UpdateCounter(metric.ID, *metric.Delta)
+		if val, ok := mg.GetCounter()[response.ID]; ok {
+			response.Delta = &val
+		}
+	case "gauge":
+		if metric.Value == nil {
+			rw.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		mu.UpdateGauge(metric.ID, *metric.Value)
+		if val, ok := mg.GetGauge()[response.ID]; ok {
+			response.Value = &val
+		}
+	default:
+		rw.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	rw.Header().Set("Content-Type", "application/json")
+	enc := json.NewEncoder(rw)
+	if err := enc.Encode(response); err != nil {
+		http.Error(rw, "Can`t encode response", http.StatusInternalServerError)
+		return
+	}
+}
+
+// GetMetricJSON returns metric value via JSON request
+func GetMetricJSON(rw http.ResponseWriter, r *http.Request, mg metricGetter) {
+	if r.Method != http.MethodPost {
+		rw.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var metric Metrics
+	if err := json.NewDecoder(r.Body).Decode(&metric); err != nil {
+		http.Error(rw, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var response Metrics
+	response.ID = metric.ID
+	response.MType = metric.MType
+
+	switch metric.MType {
+	case "gauge":
+		metrics := mg.GetGauge()
+		value, ok := metrics[metric.ID]
+		if !ok {
+			http.Error(rw, "No such gauge metric "+metric.ID, http.StatusNotFound)
+			return
+		}
+		response.Value = &value
+	case "counter":
+		metrics := mg.GetCounter()
+		value, ok := metrics[metric.ID]
+		if !ok {
+			http.Error(rw, "No such counter metric "+metric.ID, http.StatusNotFound)
+		}
+		response.Delta = &value
+	default:
+		http.Error(rw, "No such metric type "+metric.ID, http.StatusNotFound)
+	}
+
+	rw.Header().Set("Content-Type", "application/json")
+	enc := json.NewEncoder(rw)
+	if err := enc.Encode(response); err != nil {
+		http.Error(rw, "Can`t encode response", http.StatusInternalServerError)
+		return
+	}
+}
+
 // GetMetric returns metric value
 func GetMetric(rw http.ResponseWriter, r *http.Request, mg metricGetter) {
 	metricType := chi.URLParam(r, "type")
@@ -78,7 +183,7 @@ func GetMetric(rw http.ResponseWriter, r *http.Request, mg metricGetter) {
 		metrics := mg.GetCounter()
 		value, ok := metrics[metricName]
 		if !ok {
-			http.Error(rw, "No such countermetric "+metricName, http.StatusNotFound)
+			http.Error(rw, "No such counter metric "+metricName, http.StatusNotFound)
 		}
 		io.WriteString(rw, strconv.FormatInt(value, 10))
 	default:
@@ -114,10 +219,21 @@ type metricStorage interface {
 
 func MetricRouter(ms metricStorage) chi.Router {
 	r := chi.NewRouter()
-
 	r.Route("/", func(r chi.Router) {
 		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 			PrintAllMetrics(w, r, ms)
+		})
+		r.Post("/update", func(w http.ResponseWriter, r *http.Request) {
+			PostMetricJSON(w, r, ms, ms)
+		})
+		r.Post("/update/", func(w http.ResponseWriter, r *http.Request) {
+			PostMetricJSON(w, r, ms, ms)
+		})
+		r.Post("/value", func(w http.ResponseWriter, r *http.Request) {
+			GetMetricJSON(w, r, ms)
+		})
+		r.Post("/value/", func(w http.ResponseWriter, r *http.Request) {
+			GetMetricJSON(w, r, ms)
 		})
 		r.Get("/health", HealthCheck)
 		r.Get("/value/{type}/{metric}", func(w http.ResponseWriter, r *http.Request) {

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand/v2"
@@ -10,46 +11,44 @@ import (
 	"time"
 )
 
-type gauge float64
-type counter int64
-
-type Metric struct {
-	name     string
-	mtype    string
-	value    interface{}
+type Metrics struct {
+	ID       string   `json:"id"`              // имя метрики
+	MType    string   `json:"type"`            // параметр, принимающий значение gauge или counter
+	Delta    *int64   `json:"delta,omitempty"` // значение метрики в случае передачи counter
+	Value    *float64 `json:"value,omitempty"` // значение метрики в случае передачи gauge
 	getValue func(*runtime.MemStats) float64
 }
 
-var metrics = []Metric{
-	{"Alloc", "gauge", gauge(0), func(m *runtime.MemStats) float64 { return float64(m.Alloc) }},
-	{"BuckHashSys", "gauge", gauge(0), func(m *runtime.MemStats) float64 { return float64(m.BuckHashSys) }},
-	{"Frees", "gauge", gauge(0), func(m *runtime.MemStats) float64 { return float64(m.Frees) }},
-	{"GCCPUFraction", "gauge", gauge(0), func(m *runtime.MemStats) float64 { return m.GCCPUFraction }},
-	{"GCSys", "gauge", gauge(0), func(m *runtime.MemStats) float64 { return float64(m.GCSys) }},
-	{"HeapAlloc", "gauge", gauge(0), func(m *runtime.MemStats) float64 { return float64(m.HeapAlloc) }},
-	{"HeapIdle", "gauge", gauge(0), func(m *runtime.MemStats) float64 { return float64(m.HeapIdle) }},
-	{"HeapInuse", "gauge", gauge(0), func(m *runtime.MemStats) float64 { return float64(m.HeapInuse) }},
-	{"HeapObjects", "gauge", gauge(0), func(m *runtime.MemStats) float64 { return float64(m.HeapObjects) }},
-	{"HeapReleased", "gauge", gauge(0), func(m *runtime.MemStats) float64 { return float64(m.HeapReleased) }},
-	{"HeapSys", "gauge", gauge(0), func(m *runtime.MemStats) float64 { return float64(m.HeapSys) }},
-	{"LastGC", "gauge", gauge(0), func(m *runtime.MemStats) float64 { return float64(m.LastGC) }},
-	{"Lookups", "gauge", gauge(0), func(m *runtime.MemStats) float64 { return float64(m.Lookups) }},
-	{"MCacheInuse", "gauge", gauge(0), func(m *runtime.MemStats) float64 { return float64(m.MCacheInuse) }},
-	{"MCacheSys", "gauge", gauge(0), func(m *runtime.MemStats) float64 { return float64(m.MCacheSys) }},
-	{"MSpanInuse", "gauge", gauge(0), func(m *runtime.MemStats) float64 { return float64(m.MSpanInuse) }},
-	{"MSpanSys", "gauge", gauge(0), func(m *runtime.MemStats) float64 { return float64(m.MSpanSys) }},
-	{"Mallocs", "gauge", gauge(0), func(m *runtime.MemStats) float64 { return float64(m.Mallocs) }},
-	{"NextGC", "gauge", gauge(0), func(m *runtime.MemStats) float64 { return float64(m.NextGC) }},
-	{"NumForcedGC", "gauge", gauge(0), func(m *runtime.MemStats) float64 { return float64(m.NumForcedGC) }},
-	{"NumGC", "gauge", gauge(0), func(m *runtime.MemStats) float64 { return float64(m.NumGC) }},
-	{"OtherSys", "gauge", gauge(0), func(m *runtime.MemStats) float64 { return float64(m.OtherSys) }},
-	{"PauseTotalNs", "gauge", gauge(0), func(m *runtime.MemStats) float64 { return float64(m.PauseTotalNs) }},
-	{"StackInuse", "gauge", gauge(0), func(m *runtime.MemStats) float64 { return float64(m.StackInuse) }},
-	{"StackSys", "gauge", gauge(0), func(m *runtime.MemStats) float64 { return float64(m.StackSys) }},
-	{"Sys", "gauge", gauge(0), func(m *runtime.MemStats) float64 { return float64(m.Sys) }},
-	{"TotalAlloc", "gauge", gauge(0), func(m *runtime.MemStats) float64 { return float64(m.TotalAlloc) }},
-	{"PollCount", "counter", counter(0), nil},
-	{"RandomValue", "gauge", gauge(0), nil},
+var metrics = []Metrics{
+	{"Alloc", "gauge", nil, nil, func(m *runtime.MemStats) float64 { return float64(m.Alloc) }},
+	{"BuckHashSys", "gauge", nil, nil, func(m *runtime.MemStats) float64 { return float64(m.BuckHashSys) }},
+	{"Frees", "gauge", nil, nil, func(m *runtime.MemStats) float64 { return float64(m.Frees) }},
+	{"GCCPUFraction", "gauge", nil, nil, func(m *runtime.MemStats) float64 { return m.GCCPUFraction }},
+	{"GCSys", "gauge", nil, nil, func(m *runtime.MemStats) float64 { return float64(m.GCSys) }},
+	{"HeapAlloc", "gauge", nil, nil, func(m *runtime.MemStats) float64 { return float64(m.HeapAlloc) }},
+	{"HeapIdle", "gauge", nil, nil, func(m *runtime.MemStats) float64 { return float64(m.HeapIdle) }},
+	{"HeapInuse", "gauge", nil, nil, func(m *runtime.MemStats) float64 { return float64(m.HeapInuse) }},
+	{"HeapObjects", "gauge", nil, nil, func(m *runtime.MemStats) float64 { return float64(m.HeapObjects) }},
+	{"HeapReleased", "gauge", nil, nil, func(m *runtime.MemStats) float64 { return float64(m.HeapReleased) }},
+	{"HeapSys", "gauge", nil, nil, func(m *runtime.MemStats) float64 { return float64(m.HeapSys) }},
+	{"LastGC", "gauge", nil, nil, func(m *runtime.MemStats) float64 { return float64(m.LastGC) }},
+	{"Lookups", "gauge", nil, nil, func(m *runtime.MemStats) float64 { return float64(m.Lookups) }},
+	{"MCacheInuse", "gauge", nil, nil, func(m *runtime.MemStats) float64 { return float64(m.MCacheInuse) }},
+	{"MCacheSys", "gauge", nil, nil, func(m *runtime.MemStats) float64 { return float64(m.MCacheSys) }},
+	{"MSpanInuse", "gauge", nil, nil, func(m *runtime.MemStats) float64 { return float64(m.MSpanInuse) }},
+	{"MSpanSys", "gauge", nil, nil, func(m *runtime.MemStats) float64 { return float64(m.MSpanSys) }},
+	{"Mallocs", "gauge", nil, nil, func(m *runtime.MemStats) float64 { return float64(m.Mallocs) }},
+	{"NextGC", "gauge", nil, nil, func(m *runtime.MemStats) float64 { return float64(m.NextGC) }},
+	{"NumForcedGC", "gauge", nil, nil, func(m *runtime.MemStats) float64 { return float64(m.NumForcedGC) }},
+	{"NumGC", "gauge", nil, nil, func(m *runtime.MemStats) float64 { return float64(m.NumGC) }},
+	{"OtherSys", "gauge", nil, nil, func(m *runtime.MemStats) float64 { return float64(m.OtherSys) }},
+	{"PauseTotalNs", "gauge", nil, nil, func(m *runtime.MemStats) float64 { return float64(m.PauseTotalNs) }},
+	{"StackInuse", "gauge", nil, nil, func(m *runtime.MemStats) float64 { return float64(m.StackInuse) }},
+	{"StackSys", "gauge", nil, nil, func(m *runtime.MemStats) float64 { return float64(m.StackSys) }},
+	{"Sys", "gauge", nil, nil, func(m *runtime.MemStats) float64 { return float64(m.Sys) }},
+	{"TotalAlloc", "gauge", nil, nil, func(m *runtime.MemStats) float64 { return float64(m.TotalAlloc) }},
+	{"PollCount", "counter", new(int64), nil, nil},
+	{"RandomValue", "gauge", nil, nil, nil},
 }
 
 // checkServerAvailability is used for checking server availability
@@ -75,19 +74,22 @@ func CollectMetrics(pollInterval int) {
 		runtime.ReadMemStats(&runtimeMetrics)
 
 		for i := range metrics {
-			if metrics[i].getValue != nil {
-				metrics[i].value = gauge(metrics[i].getValue(&runtimeMetrics))
-			} else {
-				switch metrics[i].name {
-				case "PollCount":
-					metrics[i].value = metrics[i].value.(counter) + 1
-					log.Printf("Current Poll count: %d", metrics[i].value)
-				case "RandomValue":
-					metrics[i].value = gauge(rand.Float64())
+			m := &metrics[i]
+			switch m.MType {
+			case "gauge":
+				if m.getValue != nil {
+					val := m.getValue(&runtimeMetrics)
+					m.Value = &val
+				} else if m.ID == "RandomValue" {
+					val := rand.Float64()
+					m.Value = &val
+				}
+			case "counter":
+				if m.ID == "PollCount" && m.Delta != nil {
+					*m.Delta++
 				}
 			}
 		}
-
 		time.Sleep(time.Duration(pollInterval) * time.Second)
 	}
 }
@@ -110,22 +112,85 @@ func PostMetric(client *http.Client, reportInterval int, host string) {
 
 	for {
 		for _, m := range metrics {
-			url := fmt.Sprintf("%s/update/%s/%s/%v", host, m.mtype, m.name, m.value)
+			var valueStr string
+			switch m.MType {
+			case "gauge":
+				if m.Value == nil {
+					continue
+				}
+				valueStr = fmt.Sprintf("%f", *m.Value)
+			case "counter":
+				if m.Delta == nil {
+					continue
+				}
+				valueStr = fmt.Sprintf("%d", *m.Delta)
+			default:
+				continue
+			}
 
+			url := fmt.Sprintf("%s/update/%s/%s/%s", host, m.MType, m.ID, valueStr)
 			req, err := http.NewRequest(http.MethodPost, url, nil)
 			if err != nil {
-				log.Printf("Error creating request for %s: %v", m.name, err)
+				log.Printf("Error creating request for %s: %v", m.ID, err)
 				continue
 			}
 			req.Header.Set("Content-Type", "text/plain")
 
 			resp, err := client.Do(req)
 			if err != nil {
-				log.Printf("Error sending request for %s: %v", m.name, err)
+				log.Printf("Error sending request for %s: %v", m.ID, err)
 				continue
 			}
 			resp.Body.Close()
 		}
+		reportCount++
+		log.Printf("Current report count: %d", reportCount)
+		time.Sleep(time.Duration(reportInterval) * time.Second)
+
+	}
+}
+
+// PostMetricJSON is used for sending metrics to server via JSON request
+func PostMetricJSON(client *http.Client, reportInterval int, host string) {
+	if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {
+		host = "http://" + host
+	}
+	log.Printf("Report Interval: %d sec", reportInterval)
+	log.Printf("Host: %s", host)
+
+	for !checkServerAvailability(host) {
+		log.Printf("Server unreachable, retry in 5 seconds...")
+		time.Sleep(5 * time.Second)
+	}
+	log.Printf("Server %s is reachable", host)
+
+	reportCount := 0
+
+	for {
+		for _, m := range metrics {
+			url := fmt.Sprintf("%s/update", host)
+
+			jsonBody, err := json.Marshal(m)
+			if err != nil {
+				log.Printf("Error encoding JSON for %s: %v", m.ID, err)
+				continue
+			}
+
+			req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(string(jsonBody)))
+			if err != nil {
+				log.Printf("Error creating request for %s: %v", m.ID, err)
+				continue
+			}
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := client.Do(req)
+			if err != nil {
+				log.Printf("Error sending request for %s: %v", m.ID, err)
+				continue
+			}
+			resp.Body.Close()
+		}
+
 		reportCount++
 		log.Printf("Current report count: %d", reportCount)
 		time.Sleep(time.Duration(reportInterval) * time.Second)
