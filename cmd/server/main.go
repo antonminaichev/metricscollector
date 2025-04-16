@@ -30,5 +30,5 @@ func run() error {
 		return err
 	}
 	logger.Log.Info("Running server", zap.String("address", cfg.Address))
-	return http.ListenAndServe(cfg.Address, logger.WithLogging(handlers.MetricRouter(storage)))
+	return http.ListenAndServe(cfg.Address, logger.WithLogging(handlers.GzipHandler(handlers.MetricRouter(storage))))
 }

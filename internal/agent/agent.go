@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -169,19 +171,31 @@ func PostMetricJSON(client *http.Client, reportInterval int, host string) {
 	for {
 		for _, m := range metrics {
 			url := fmt.Sprintf("%s/update", host)
-
 			jsonBody, err := json.Marshal(m)
 			if err != nil {
 				log.Printf("Error encoding JSON for %s: %v", m.ID, err)
 				continue
 			}
-
-			req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(string(jsonBody)))
+			buf := bytes.NewBuffer(nil)
+			zb, err := gzip.NewWriterLevel(buf, gzip.BestSpeed)
+			if err != nil {
+				log.Printf("Unable to create gzip writer")
+			}
+			_, err = zb.Write(jsonBody)
+			if err != nil {
+				log.Printf("Unable to zip data")
+			}
+			err = zb.Close()
+			if err != nil {
+				log.Printf("Unable to close zip writer")
+			}
+			req, err := http.NewRequest(http.MethodPost, url, buf)
 			if err != nil {
 				log.Printf("Error creating request for %s: %v", m.ID, err)
 				continue
 			}
 			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Content-Encoding", "gzip")
 
 			resp, err := client.Do(req)
 			if err != nil {
