@@ -3,8 +3,10 @@ package main
 import (
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/antonminaichev/metricscollector/internal/logger"
+	"github.com/antonminaichev/metricscollector/internal/server/file"
 	"github.com/antonminaichev/metricscollector/internal/server/handlers"
 	ms "github.com/antonminaichev/metricscollector/internal/server/memstorage"
 	"go.uber.org/zap"
@@ -29,6 +31,31 @@ func run() error {
 	if err := logger.Initialize(cfg.LogLevel); err != nil {
 		return err
 	}
-	logger.Log.Info("Running server", zap.String("address", cfg.Address))
-	return http.ListenAndServe(cfg.Address, logger.WithLogging(handlers.GzipHandler(handlers.MetricRouter(storage))))
+
+	fileStorage := file.NewFileStorage(storage, cfg.FileStoragePath, logger.Log)
+
+	if cfg.Restore {
+		if err := fileStorage.LoadMetrics(); err != nil {
+			logger.Log.Error("Failed to load metrics from file", zap.Error(err))
+		}
+	}
+
+	server := &http.Server{
+		Addr:    cfg.Address,
+		Handler: logger.WithLogging(handlers.GzipHandler(handlers.MetricRouter(storage))),
+	}
+
+	go func() {
+		logger.Log.Info("Running server", zap.String("address", cfg.Address))
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Log.Error("Server error", zap.Error(err))
+		}
+	}()
+
+	for {
+		if err := fileStorage.SaveMetrics(); err != nil {
+			logger.Log.Error("Failed to save metrics to file", zap.Error(err))
+		}
+		time.Sleep(time.Duration(cfg.StoreInterval) * time.Second)
+	}
 }
