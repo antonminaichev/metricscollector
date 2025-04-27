@@ -4,12 +4,20 @@ import (
 	"encoding/json"
 	"os"
 
-	ms "github.com/antonminaichev/metricscollector/internal/server/memstorage"
 	"go.uber.org/zap"
 )
 
+// Storage интерфейс для работы с метриками
+type storage interface {
+	UpdateCounter(name string, value int64)
+	UpdateGauge(name string, value float64)
+	GetCounter() map[string]int64
+	GetGauge() map[string]float64
+	PrintAllMetrics() string
+}
+
 type FileStorage struct {
-	storage  *ms.MemStorage
+	storage  storage
 	filePath string
 	logger   *zap.Logger
 }
@@ -19,7 +27,7 @@ type MetricsData struct {
 	Counter map[string]int64   `json:"counter"`
 }
 
-func NewFileStorage(storage *ms.MemStorage, filePath string, logger *zap.Logger) *FileStorage {
+func NewFileStorage(storage storage, filePath string, logger *zap.Logger) *FileStorage {
 	return &FileStorage{
 		storage:  storage,
 		filePath: filePath,
@@ -29,8 +37,8 @@ func NewFileStorage(storage *ms.MemStorage, filePath string, logger *zap.Logger)
 
 func (fs *FileStorage) SaveMetrics() error {
 	data := MetricsData{
-		Gauge:   fs.storage.Gauge,
-		Counter: fs.storage.Counter,
+		Gauge:   fs.storage.GetGauge(),
+		Counter: fs.storage.GetCounter(),
 	}
 
 	file, err := json.MarshalIndent(data, "", "  ")
@@ -55,8 +63,13 @@ func (fs *FileStorage) LoadMetrics() error {
 		return err
 	}
 
-	fs.storage.Gauge = metricsData.Gauge
-	fs.storage.Counter = metricsData.Counter
+	for name, value := range metricsData.Gauge {
+		fs.storage.UpdateGauge(name, value)
+	}
+
+	for name, value := range metricsData.Counter {
+		fs.storage.UpdateCounter(name, value)
+	}
 
 	return nil
 }

@@ -7,8 +7,9 @@ import (
 
 	"github.com/antonminaichev/metricscollector/internal/logger"
 	"github.com/antonminaichev/metricscollector/internal/server/file"
-	"github.com/antonminaichev/metricscollector/internal/server/handlers"
 	ms "github.com/antonminaichev/metricscollector/internal/server/memstorage"
+	"github.com/antonminaichev/metricscollector/internal/server/middleware"
+	"github.com/antonminaichev/metricscollector/internal/server/router"
 	"go.uber.org/zap"
 )
 
@@ -42,7 +43,7 @@ func run() error {
 
 	server := &http.Server{
 		Addr:    cfg.Address,
-		Handler: logger.WithLogging(handlers.GzipHandler(handlers.MetricRouter(storage))),
+		Handler: logger.WithLogging(middleware.GzipHandler(router.NewRouter(storage))),
 	}
 
 	go func() {

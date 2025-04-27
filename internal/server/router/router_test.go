@@ -1,4 +1,4 @@
-package handlers
+package router
 
 import (
 	"io"
@@ -32,7 +32,7 @@ func TestHealthCheck(t *testing.T) {
 		Gauge:   make(map[string]float64),
 		Counter: make(map[string]int64),
 	}
-	ts := httptest.NewServer(MetricRouter(storage))
+	ts := httptest.NewServer(NewRouter(storage))
 	defer ts.Close()
 	var testTable = []struct {
 		url    string
@@ -55,7 +55,7 @@ func TestPostMetric(t *testing.T) {
 		Gauge:   make(map[string]float64),
 		Counter: make(map[string]int64),
 	}
-	ts := httptest.NewServer(MetricRouter(storage))
+	ts := httptest.NewServer(NewRouter(storage))
 	defer ts.Close()
 
 	testTable := []struct {
@@ -125,7 +125,7 @@ func TestGetMetric(t *testing.T) {
 	storage.UpdateGauge("testGauge", 123.45)
 	storage.UpdateCounter("testCounter", 100)
 
-	ts := httptest.NewServer(MetricRouter(storage))
+	ts := httptest.NewServer(NewRouter(storage))
 	defer ts.Close()
 
 	testTable := []struct {
@@ -184,12 +184,13 @@ func TestGetMetric(t *testing.T) {
 		})
 	}
 }
+
 func TestPrintAllMetrics(t *testing.T) {
 	storage := &ms.MemStorage{
 		Gauge:   make(map[string]float64),
 		Counter: make(map[string]int64),
 	}
-	ts := httptest.NewServer(MetricRouter(storage))
+	ts := httptest.NewServer(NewRouter(storage))
 	defer ts.Close()
 
 	storage.UpdateCounter("testCounter", 52)
