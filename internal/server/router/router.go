@@ -1,6 +1,7 @@
 package router
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/antonminaichev/metricscollector/internal/server/handlers"
@@ -16,11 +17,19 @@ type metricStorage interface {
 	PrintAllMetrics() string
 }
 
-func NewRouter(ms metricStorage) chi.Router {
+type database interface {
+	Ping(ctx context.Context) error
+	Close()
+}
+
+func NewRouter(ms metricStorage, db database) chi.Router {
 	r := chi.NewRouter()
 	r.Route("/", func(r chi.Router) {
 		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 			handlers.PrintAllMetrics(w, r, ms)
+		})
+		r.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
+			handlers.PingDB(w, r, db)
 		})
 		r.Post("/update", func(w http.ResponseWriter, r *http.Request) {
 			handlers.PostMetricJSON(w, r, ms, ms)
