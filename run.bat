@@ -10,7 +10,7 @@ echo Building agent...
 go build -o .\cmd\agent\agent.exe .\cmd\agent\
 
 :: Запускаем сервер в отдельном окне
-start "Server" cmd /k ".\cmd\server\server.exe -a=localhost:8080"
+start "Server" cmd /k ".\cmd\server\server.exe -a=localhost:8080 -i 10 -f ./metrics/metrics.json"
 set SERVER_PID=%ERRORLEVEL%
 
 :: Ждем 2 секунды, чтобы сервер успел запуститься

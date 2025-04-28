@@ -14,15 +14,15 @@ func TestCollectMetrics(t *testing.T) {
 	tests := []struct {
 		name           string
 		pollInterval   int
-		expectedChecks func(t *testing.T, metrics []Metric)
+		expectedChecks func(t *testing.T, metrics []Metrics)
 	}{
 		{
 			name:         "Сбор всех метрик",
 			pollInterval: 2,
-			expectedChecks: func(t *testing.T, metrics []Metric) {
-				findMetric := func(name string) *Metric {
+			expectedChecks: func(t *testing.T, metrics []Metrics) {
+				findMetric := func(name string) *Metrics {
 					for i := range metrics {
-						if metrics[i].name == name {
+						if metrics[i].ID == name {
 							return &metrics[i]
 						}
 					}
@@ -40,30 +40,37 @@ func TestCollectMetrics(t *testing.T) {
 				} {
 					metric := findMetric(name)
 					require.NotNil(t, metric, "Метрика %s не найдена", name)
-					require.NotNil(t, metric.value, "Значение метрики %s не установлено", name)
+					require.NotNil(t, metric.Value, "Значение метрики %s не установлено", name)
 				}
 
+				// Проверка PollCount
 				pollCount := findMetric("PollCount")
 				require.NotNil(t, pollCount)
-				require.Greater(t, pollCount.value.(counter), counter(0))
+				require.Equal(t, "counter", pollCount.MType)
+				require.NotNil(t, pollCount.Delta)
+				require.Greater(t, *pollCount.Delta, int64(0))
 
+				// Проверка RandomValue
 				randomValue := findMetric("RandomValue")
 				require.NotNil(t, randomValue)
-				require.GreaterOrEqual(t, randomValue.value.(gauge), gauge(0))
-				require.LessOrEqual(t, randomValue.value.(gauge), gauge(1))
+				require.Equal(t, "gauge", randomValue.MType)
+				require.NotNil(t, randomValue.Value)
+				require.GreaterOrEqual(t, *randomValue.Value, 0.0)
+				require.LessOrEqual(t, *randomValue.Value, 1.0)
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Очищаем значения метрик перед тестом
+			// Сброс значений перед тестом
 			for i := range metrics {
-				switch metrics[i].mtype {
+				switch metrics[i].MType {
 				case "gauge":
-					metrics[i].value = gauge(0)
+					metrics[i].Value = nil
 				case "counter":
-					metrics[i].value = counter(0)
+					metrics[i].Delta = new(int64)
+					*metrics[i].Delta = 0
 				}
 			}
 

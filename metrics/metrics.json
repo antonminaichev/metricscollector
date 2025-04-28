@@ -1,0 +1,35 @@
+{
+  "gauge": {
+    "Alloc": 279016,
+    "BuckHashSys": 5507,
+    "Frees": 25,
+    "GCCPUFraction": 0,
+    "GCSys": 1642264,
+    "HeapAlloc": 279016,
+    "HeapIdle": 3268608,
+    "HeapInuse": 794624,
+    "HeapObjects": 1761,
+    "HeapReleased": 3235840,
+    "HeapSys": 4063232,
+    "LastGC": 0,
+    "Lookups": 0,
+    "MCacheInuse": 14016,
+    "MCacheSys": 16352,
+    "MSpanInuse": 34720,
+    "MSpanSys": 48960,
+    "Mallocs": 1786,
+    "NextGC": 4194304,
+    "NumForcedGC": 0,
+    "NumGC": 0,
+    "OtherSys": 928837,
+    "PauseTotalNs": 0,
+    "RandomValue": 0.3231484039225283,
+    "StackInuse": 131072,
+    "StackSys": 131072,
+    "Sys": 6836224,
+    "TotalAlloc": 279016
+  },
+  "counter": {
+    "PollCount": 10
+  }
+}

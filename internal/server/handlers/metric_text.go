@@ -18,11 +18,7 @@ type metricGetter interface {
 	GetGauge() map[string]float64
 }
 
-type metricPrinter interface {
-	PrintAllMetrics() string
-}
-
-// PostMetric updates metric value
+// PostMetric обновляет значение метрики
 func PostMetric(rw http.ResponseWriter, r *http.Request, mu metricUpdater) {
 	if r.Method != http.MethodPost {
 		rw.WriteHeader(http.StatusMethodNotAllowed)
@@ -39,14 +35,14 @@ func PostMetric(rw http.ResponseWriter, r *http.Request, mu metricUpdater) {
 	}
 
 	switch metricType {
-	case "counter":
+	case MetricTypeCounter:
 		v, err := strconv.ParseInt(metricValue, 10, 64)
 		if err != nil {
 			rw.WriteHeader(http.StatusBadRequest)
 			return
 		}
 		mu.UpdateCounter(metricName, v)
-	case "gauge":
+	case MetricTypeGauge:
 		v, err := strconv.ParseFloat(metricValue, 64)
 		if err != nil {
 			rw.WriteHeader(http.StatusBadRequest)
@@ -61,12 +57,12 @@ func PostMetric(rw http.ResponseWriter, r *http.Request, mu metricUpdater) {
 	rw.WriteHeader(http.StatusOK)
 }
 
-// GetMetric returns metric value
+// GetMetric возвращает значение метрики
 func GetMetric(rw http.ResponseWriter, r *http.Request, mg metricGetter) {
 	metricType := chi.URLParam(r, "type")
 	metricName := chi.URLParam(r, "metric")
 	switch metricType {
-	case "gauge":
+	case MetricTypeGauge:
 		metrics := mg.GetGauge()
 		value, ok := metrics[metricName]
 		if !ok {
@@ -74,57 +70,14 @@ func GetMetric(rw http.ResponseWriter, r *http.Request, mg metricGetter) {
 			return
 		}
 		io.WriteString(rw, strconv.FormatFloat(value, 'f', -1, 64))
-	case "counter":
+	case MetricTypeCounter:
 		metrics := mg.GetCounter()
 		value, ok := metrics[metricName]
 		if !ok {
-			http.Error(rw, "No such countermetric "+metricName, http.StatusNotFound)
+			http.Error(rw, "No such counter metric "+metricName, http.StatusNotFound)
 		}
 		io.WriteString(rw, strconv.FormatInt(value, 10))
 	default:
 		http.Error(rw, "No such metric type "+metricName, http.StatusNotFound)
 	}
-}
-
-// PrintAllMetrics prints all metrics
-func PrintAllMetrics(rw http.ResponseWriter, r *http.Request, mp metricPrinter) {
-	rw.Header().Set("Content-Type", "text/html")
-	io.WriteString(rw, mp.PrintAllMetrics())
-}
-
-// Health Check is used for checking server availability
-func HealthCheck(rw http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	rw.Header().Set("Content-Type", "application/json")
-	rw.WriteHeader(http.StatusOK)
-	rw.Write([]byte(`{"status": "ok"}`))
-}
-
-// MetricRouter is a composite interface for all operations
-type metricStorage interface {
-	metricUpdater
-	metricGetter
-	metricPrinter
-}
-
-func MetricRouter(ms metricStorage) chi.Router {
-	r := chi.NewRouter()
-
-	r.Route("/", func(r chi.Router) {
-		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-			PrintAllMetrics(w, r, ms)
-		})
-		r.Get("/health", HealthCheck)
-		r.Get("/value/{type}/{metric}", func(w http.ResponseWriter, r *http.Request) {
-			GetMetric(w, r, ms)
-		})
-		r.Post("/update/{type}/{metric}/{value}", func(w http.ResponseWriter, r *http.Request) {
-			PostMetric(w, r, ms)
-		})
-	})
-	return r
 }
