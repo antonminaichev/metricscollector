@@ -28,7 +28,6 @@ func NewDBConnection(dsn string, logger *zap.Logger) (*DB, error) {
 }
 
 func (db *DB) Ping(ctx context.Context) error {
-	//  return db.conn.Ping(ctx)
 	if err := db.conn.Ping(ctx); err != nil {
 		db.logger.Info("Attempting to reconnect to database")
 

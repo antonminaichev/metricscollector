@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -21,7 +22,7 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }
 
@@ -33,17 +34,23 @@ func run() error {
 	}
 	cfg, err := NewConfig()
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("failed to create config: %w", err)
 	}
 	if err := logger.Initialize(cfg.LogLevel); err != nil {
-		return err
+		return fmt.Errorf("failed to initialize logger: %w", err)
 	}
 
 	fileStorage := file.NewFileStorage(storage, cfg.FileStoragePath, logger.Log)
 
 	var dbConnection *database.DB
 	if cfg.DatabaseDSN != "" {
-		dbConnection, err = database.NewDBConnection(cfg.DatabaseDSN, logger.Log)
+		// Добавляем host=localhost, если его нет в строке подключения
+		dsn := cfg.DatabaseDSN
+		if !strings.Contains(dsn, "host=") && !strings.Contains(dsn, "@") {
+			dsn = "host=localhost " + dsn
+		}
+
+		dbConnection, err = database.NewDBConnection(dsn, logger.Log)
 		if err != nil {
 			return fmt.Errorf("failed to connect to database: %w", err)
 		}
