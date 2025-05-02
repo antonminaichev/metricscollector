@@ -17,6 +17,7 @@ jobs:
 
   metricstest:
     runs-on: ubuntu-latest
+    container: golang:1.24.1
     needs: branchtest
 
     services:
@@ -49,11 +50,6 @@ jobs:
           chmod -R +x $GITHUB_WORKSPACE/.tools
           mv $GITHUB_WORKSPACE/.tools/metricstest /usr/local/bin/metricstest
           mv $GITHUB_WORKSPACE/.tools/random /usr/local/bin/random
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.23"
 
       - name: Setup go deps
         run: |
