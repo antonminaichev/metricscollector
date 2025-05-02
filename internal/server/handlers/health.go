@@ -40,9 +40,5 @@ func PingDatabase(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-
-	_, err = io.WriteString(w, "")
-	if err != nil {
-		return
-	}
+	w.Write([]byte(`{"status": "ok"}`))
 }
