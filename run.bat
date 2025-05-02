@@ -10,7 +10,7 @@ echo Building agent...
 go build -o .\cmd\agent\agent.exe .\cmd\agent\
 
 :: Запускаем сервер в отдельном окне
-set DATABASE_DSN=postgres://postgres:pass@localhost:5432
+set DATABASE_DSN=postgres://postgres:pass@localhost:5432?sslmode=disable
 start "Server" cmd /k ".\cmd\server\server.exe -a=localhost:8080 -i 10 -f ./metrics/metrics.json"
 set SERVER_PID=%ERRORLEVEL%
 

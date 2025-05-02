@@ -47,16 +47,13 @@ func run() error {
 		Handler: logger.WithLogging(middleware.GzipHandler(router.NewRouter(storage))),
 	}
 
+	logger.Log.Info("Connecting to DB", zap.String("DSN", cfg.DatabaseConnection))
 	err = database.InitDB(cfg.DatabaseConnection)
 	if err != nil {
-		logger.Log.Warn("Cannot connect to DB", zap.String("db", cfg.DatabaseConnection))
+		logger.Log.Info("Error connecting to DB", zap.Any("error", err))
 	}
 
 	go func() {
-		err = database.InitDB(cfg.DatabaseConnection)
-		if err != nil {
-			logger.Log.Warn("Cannot connect to DB", zap.String("db", cfg.DatabaseConnection))
-		}
 		logger.Log.Info("Running server", zap.String("address", cfg.Address))
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Log.Error("Server error", zap.Error(err))
