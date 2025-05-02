@@ -53,6 +53,10 @@ func run() error {
 	}
 
 	go func() {
+		err = database.InitDB(cfg.DatabaseConnection)
+		if err != nil {
+			logger.Log.Warn("Cannot connect to DB", zap.String("db", cfg.DatabaseConnection))
+		}
 		logger.Log.Info("Running server", zap.String("address", cfg.Address))
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Log.Error("Server error", zap.Error(err))
