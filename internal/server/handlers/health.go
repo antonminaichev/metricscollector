@@ -3,6 +3,8 @@ package handlers
 import (
 	"io"
 	"net/http"
+
+	"github.com/antonminaichev/metricscollector/internal/database"
 )
 
 // MetricPrinter интерфейс для вывода метрик
@@ -27,4 +29,20 @@ func PrintAllMetrics(rw http.ResponseWriter, r *http.Request, mp metricPrinter) 
 	rw.Header().Set("Content-Type", "text/html")
 	rw.WriteHeader(http.StatusOK)
 	io.WriteString(rw, mp.PrintAllMetrics())
+}
+
+func PingDatabase(w http.ResponseWriter, r *http.Request) {
+	err := database.PingDB()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	_, err = io.WriteString(w, "")
+	if err != nil {
+		return
+	}
 }

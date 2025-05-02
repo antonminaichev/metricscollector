@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/antonminaichev/metricscollector/internal/database"
 	"github.com/antonminaichev/metricscollector/internal/logger"
 	"github.com/antonminaichev/metricscollector/internal/server/file"
 	ms "github.com/antonminaichev/metricscollector/internal/server/memstorage"
@@ -44,6 +45,11 @@ func run() error {
 	server := &http.Server{
 		Addr:    cfg.Address,
 		Handler: logger.WithLogging(middleware.GzipHandler(router.NewRouter(storage))),
+	}
+
+	err = database.InitDB(cfg.DatabaseConnection)
+	if err != nil {
+		logger.Log.Warn("Cannot connect to DB", zap.String("db", cfg.DatabaseConnection))
 	}
 
 	go func() {

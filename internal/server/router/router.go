@@ -22,6 +22,7 @@ func NewRouter(ms metricStorage) chi.Router {
 		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 			handlers.PrintAllMetrics(w, r, ms)
 		})
+		r.Get("/ping", handlers.PingDatabase)
 		r.Post("/update", func(w http.ResponseWriter, r *http.Request) {
 			handlers.PostMetricJSON(w, r, ms, ms)
 		})
