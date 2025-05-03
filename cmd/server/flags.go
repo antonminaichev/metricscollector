@@ -12,7 +12,7 @@ type Config struct {
 	StoreInterval      int    `env:"STORE_INTERVAL" envDefault:"300"`
 	FileStoragePath    string `env:"FILE_STORAGE_PATH" envDefault:"./metrics/metrics.json"`
 	Restore            bool   `env:"RESTORE" envDefault:"true"`
-	DatabaseConnection string `env:"DATABASE_DSN" envDefault:"postgres://postgres:postgres@postgres:5432/praktikum?sslmode=disable"`
+	DatabaseConnection string `env:"DATABASE_DSN"`
 }
 
 func NewConfig() (*Config, error) {
