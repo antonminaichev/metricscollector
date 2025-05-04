@@ -211,3 +211,85 @@ func PostMetricJSON(client *http.Client, reportInterval int, host string) {
 
 	}
 }
+
+// PostMetricsBatch is used for sending metrics to server via JSON request by batches
+func PostMetricsBatch(client *http.Client, reportInterval int, host string) {
+	if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {
+		host = "http://" + host
+	}
+	log.Printf("Report Interval: %d sec", reportInterval)
+	log.Printf("Host: %s", host)
+
+	for !checkServerAvailability(host) {
+		log.Printf("Server unreachable, retry in 5 seconds...")
+		time.Sleep(5 * time.Second)
+	}
+	log.Printf("Server %s is reachable", host)
+
+	reportCount := 0
+
+	for {
+		var metricsBatch []Metrics
+		for _, m := range metrics {
+			metric := Metrics{
+				ID:    m.ID,
+				MType: m.MType,
+			}
+			if m.MType == "counter" && m.Delta != nil {
+				metric.Delta = m.Delta
+			} else if m.MType == "gauge" && m.Value != nil {
+				metric.Value = m.Value
+			}
+			metricsBatch = append(metricsBatch, metric)
+		}
+
+		if len(metricsBatch) == 0 {
+			log.Printf("No metrics to send, skipping batch")
+			time.Sleep(time.Duration(reportInterval) * time.Second)
+			continue
+		}
+
+		url := fmt.Sprintf("%s/updates/", host)
+		jsonBody, err := json.Marshal(metricsBatch)
+		if err != nil {
+			log.Printf("Error encoding JSON batch: %v", err)
+			continue
+		}
+
+		buf := bytes.NewBuffer(nil)
+		zb, err := gzip.NewWriterLevel(buf, gzip.BestSpeed)
+		if err != nil {
+			log.Printf("Unable to create gzip writer: %v", err)
+			continue
+		}
+		_, err = zb.Write(jsonBody)
+		if err != nil {
+			log.Printf("Unable to zip data: %v", err)
+			continue
+		}
+		err = zb.Close()
+		if err != nil {
+			log.Printf("Unable to close zip writer: %v", err)
+			continue
+		}
+
+		req, err := http.NewRequest(http.MethodPost, url, buf)
+		if err != nil {
+			log.Printf("Error creating batch request: %v", err)
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Encoding", "gzip")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Printf("Error sending batch request: %v", err)
+			continue
+		}
+		resp.Body.Close()
+
+		reportCount++
+		log.Printf("Current report count: %d", reportCount)
+		time.Sleep(time.Duration(reportInterval) * time.Second)
+	}
+}
