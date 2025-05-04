@@ -42,23 +42,10 @@ func PostMetricJSON(rw http.ResponseWriter, r *http.Request, mu metricUpdaterJSO
 	if database.DB != nil {
 		// Не совсем понятно как использовать тут интерфейс, описывать новый storage type?
 		// И приводить сигнатуры методов memstorage к UpdateMetric(...) и GetMetric(...) как сделал в package database?
-		if metric.MType == MetricTypeCounter && metric.Delta != nil {
-			query := `
-				INSERT INTO metrics (id, type, delta, value)
-				VALUES ($1, $2, $3, NULL)
-				ON CONFLICT (id, type) DO UPDATE
-				SET delta = metrics.delta + EXCLUDED.delta`
-			_, err := database.DB.Exec(query, metric.ID, metric.MType, *metric.Delta)
-			if err != nil {
-				http.Error(rw, "Failed to update counter in database", http.StatusInternalServerError)
-				return
-			}
-		} else {
-			err := database.UpdateMetric(metric.ID, metric.MType, metric.Delta, metric.Value)
-			if err != nil {
-				http.Error(rw, "Failed to update metric in database", http.StatusInternalServerError)
-				return
-			}
+		err := database.UpdateMetric(metric.ID, metric.MType, metric.Delta, metric.Value)
+		if err != nil {
+			http.Error(rw, "Failed to update metric in database", http.StatusInternalServerError)
+			return
 		}
 		delta, value, err := database.GetMetric(metric.ID, metric.MType)
 		if err != nil {
@@ -74,8 +61,7 @@ func PostMetricJSON(rw http.ResponseWriter, r *http.Request, mu metricUpdaterJSO
 				rw.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			currentValue := mg.GetCounter()[response.ID]
-			mu.UpdateCounter(metric.ID, currentValue+*metric.Delta)
+			mu.UpdateCounter(metric.ID, *metric.Delta)
 			if val, ok := mg.GetCounter()[response.ID]; ok {
 				response.Delta = &val
 			}
