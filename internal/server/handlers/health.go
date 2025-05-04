@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/antonminaichev/metricscollector/internal/database"
+	"github.com/antonminaichev/metricscollector/internal/retry"
 )
 
 // MetricPrinter интерфейс для вывода метрик
@@ -32,7 +33,9 @@ func PrintAllMetrics(rw http.ResponseWriter, r *http.Request, mp metricPrinter) 
 }
 
 func PingDatabase(w http.ResponseWriter, r *http.Request) {
-	err := database.PingDB()
+	err := retry.Do(retry.DefaultRetryConfig(), func() error {
+		return database.PingDB()
+	})
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return

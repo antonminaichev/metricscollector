@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/antonminaichev/metricscollector/internal/retry"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -15,7 +16,10 @@ func InitDB(connStr string) error {
 	if err != nil {
 		return err
 	}
-	return DB.Ping()
+
+	return retry.Do(retry.DefaultRetryConfig(), func() error {
+		return DB.Ping()
+	})
 }
 
 func InitMetricsTable() error {
@@ -27,8 +31,11 @@ func InitMetricsTable() error {
 			value DOUBLE PRECISION,
 			PRIMARY KEY (id, type)
 		)`
-	_, err := DB.Exec(query)
-	return err
+
+	return retry.Do(retry.DefaultRetryConfig(), func() error {
+		_, err := DB.Exec(query)
+		return err
+	})
 }
 
 // UpdateMetric обновляет или создает метрику в БД
@@ -39,8 +46,10 @@ func UpdateMetric(id string, mType string, delta *int64, value *float64) error {
 		ON CONFLICT (id, type) DO UPDATE
 		SET delta = $3, value = $4`
 
-	_, err := DB.Exec(query, id, mType, delta, value)
-	return err
+	return retry.Do(retry.DefaultRetryConfig(), func() error {
+		_, err := DB.Exec(query, id, mType, delta, value)
+		return err
+	})
 }
 
 func GetMetric(id string, mType string) (*int64, *float64, error) {
@@ -48,7 +57,11 @@ func GetMetric(id string, mType string) (*int64, *float64, error) {
 	var value sql.NullFloat64
 
 	query := `SELECT delta, value FROM metrics WHERE id = $1 AND type = $2`
-	err := DB.QueryRow(query, id, mType).Scan(&delta, &value)
+
+	err := retry.Do(retry.DefaultRetryConfig(), func() error {
+		return DB.QueryRow(query, id, mType).Scan(&delta, &value)
+	})
+
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil, fmt.Errorf("metric not found")
@@ -70,5 +83,7 @@ func GetMetric(id string, mType string) (*int64, *float64, error) {
 }
 
 func PingDB() error {
-	return DB.Ping()
+	return retry.Do(retry.DefaultRetryConfig(), func() error {
+		return DB.Ping()
+	})
 }
