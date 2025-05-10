@@ -122,6 +122,10 @@ func (s *PostgresStorage) GetAllMetrics() (map[string]int64, map[string]float64,
 		}
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+
 	return counters, gauges, nil
 }
 
