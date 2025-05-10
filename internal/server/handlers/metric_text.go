@@ -5,21 +5,12 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/antonminaichev/metricscollector/internal/server/storage"
 	"github.com/go-chi/chi"
 )
 
-type metricUpdater interface {
-	UpdateCounter(name string, value int64)
-	UpdateGauge(name string, value float64)
-}
-
-type metricGetter interface {
-	GetCounter() map[string]int64
-	GetGauge() map[string]float64
-}
-
 // PostMetric обновляет значение метрики
-func PostMetric(rw http.ResponseWriter, r *http.Request, mu metricUpdater) {
+func PostMetric(rw http.ResponseWriter, r *http.Request, s storage.Storage) {
 	if r.Method != http.MethodPost {
 		rw.WriteHeader(http.StatusMethodNotAllowed)
 		return
@@ -35,20 +26,26 @@ func PostMetric(rw http.ResponseWriter, r *http.Request, mu metricUpdater) {
 	}
 
 	switch metricType {
-	case MetricTypeCounter:
+	case string(storage.Counter):
 		v, err := strconv.ParseInt(metricValue, 10, 64)
 		if err != nil {
 			rw.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		mu.UpdateCounter(metricName, v)
-	case MetricTypeGauge:
+		if err := s.UpdateMetric(metricName, storage.Counter, &v, nil); err != nil {
+			rw.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+	case string(storage.Gauge):
 		v, err := strconv.ParseFloat(metricValue, 64)
 		if err != nil {
 			rw.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		mu.UpdateGauge(metricName, v)
+		if err := s.UpdateMetric(metricName, storage.Gauge, nil, &v); err != nil {
+			rw.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 	default:
 		rw.WriteHeader(http.StatusBadRequest)
 		return
@@ -58,26 +55,32 @@ func PostMetric(rw http.ResponseWriter, r *http.Request, mu metricUpdater) {
 }
 
 // GetMetric возвращает значение метрики
-func GetMetric(rw http.ResponseWriter, r *http.Request, mg metricGetter) {
+func GetMetric(rw http.ResponseWriter, r *http.Request, s storage.Storage) {
 	metricType := chi.URLParam(r, "type")
 	metricName := chi.URLParam(r, "metric")
+
+	var mType storage.MetricType
 	switch metricType {
-	case MetricTypeGauge:
-		metrics := mg.GetGauge()
-		value, ok := metrics[metricName]
-		if !ok {
-			http.Error(rw, "No such gauge metric "+metricName, http.StatusNotFound)
-			return
-		}
-		io.WriteString(rw, strconv.FormatFloat(value, 'f', -1, 64))
-	case MetricTypeCounter:
-		metrics := mg.GetCounter()
-		value, ok := metrics[metricName]
-		if !ok {
-			http.Error(rw, "No such counter metric "+metricName, http.StatusNotFound)
-		}
-		io.WriteString(rw, strconv.FormatInt(value, 10))
+	case string(storage.Counter):
+		mType = storage.Counter
+	case string(storage.Gauge):
+		mType = storage.Gauge
 	default:
 		http.Error(rw, "No such metric type "+metricName, http.StatusNotFound)
+		return
+	}
+
+	delta, value, err := s.GetMetric(metricName, mType)
+	if err != nil {
+		http.Error(rw, "Metric not found", http.StatusNotFound)
+		return
+	}
+
+	if mType == storage.Counter && delta != nil {
+		io.WriteString(rw, strconv.FormatInt(*delta, 10))
+	} else if mType == storage.Gauge && value != nil {
+		io.WriteString(rw, strconv.FormatFloat(*value, 'f', -1, 64))
+	} else {
+		http.Error(rw, "Metric value is nil", http.StatusNotFound)
 	}
 }

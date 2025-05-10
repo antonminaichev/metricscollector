@@ -1,31 +1,20 @@
 package handlers
 
 import (
-	"database/sql"
 	"encoding/json"
 	"net/http"
 
-	"github.com/antonminaichev/metricscollector/internal/database"
+	"github.com/antonminaichev/metricscollector/internal/server/storage"
 )
 
-type metricUpdaterJSON interface {
-	UpdateCounter(name string, value int64)
-	UpdateGauge(name string, value float64)
-}
-
-type metricGetterJSON interface {
-	GetCounter() map[string]int64
-	GetGauge() map[string]float64
-}
-
 // PostMetricJSON обновляет значение метрики через JSON-запрос
-func PostMetricJSON(rw http.ResponseWriter, r *http.Request, mu metricUpdaterJSON, mg metricGetterJSON) {
+func PostMetricJSON(rw http.ResponseWriter, r *http.Request, s storage.Storage) {
 	if r.Method != http.MethodPost {
 		rw.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 
-	var metric Metrics
+	var metric storage.Metric
 	if err := json.NewDecoder(r.Body).Decode(&metric); err != nil {
 		http.Error(rw, err.Error(), http.StatusBadRequest)
 		return
@@ -37,109 +26,46 @@ func PostMetricJSON(rw http.ResponseWriter, r *http.Request, mu metricUpdaterJSO
 		return
 	}
 
-	var response Metrics
+	var response storage.Metric
 	response.ID = metric.ID
 	response.MType = metric.MType
 
-	if database.DB != nil {
-		// Работа с БД
-		switch metric.MType {
-		case MetricTypeCounter:
-			if metric.Delta == nil {
-				rw.WriteHeader(http.StatusBadRequest)
-				return
-			}
-			// Вставляем или обновляем, суммируя дельту
-			query := `
-                INSERT INTO metrics (id, type, delta, value)
-                VALUES ($1, $2, $3, NULL)
-                ON CONFLICT (id, type) DO UPDATE
-                SET delta = metrics.delta + EXCLUDED.delta`
-			if _, err := database.DB.Exec(query, metric.ID, metric.MType, *metric.Delta); err != nil {
-				http.Error(rw, "Failed to update counter in database", http.StatusInternalServerError)
-				return
-			}
-			// Получаем актуальное значение
-			var dbDelta sql.NullInt64
-			var dbValue sql.NullFloat64
-			err := database.DB.QueryRow(
-				"SELECT delta, value FROM metrics WHERE id = $1 AND type = $2",
-				metric.ID, metric.MType,
-			).Scan(&dbDelta, &dbValue)
-			if err != nil {
-				http.Error(rw, "Failed to fetch updated metric", http.StatusInternalServerError)
-				return
-			}
-			if dbDelta.Valid {
-				response.Delta = &dbDelta.Int64
-			}
-			if dbValue.Valid {
-				response.Value = &dbValue.Float64
-			}
-
-		case MetricTypeGauge:
-			if metric.Value == nil {
-				rw.WriteHeader(http.StatusBadRequest)
-				return
-			}
-			// Вставляем или обновляем значение
-			query := `
-                INSERT INTO metrics (id, type, delta, value)
-                VALUES ($1, $2, NULL, $3)
-                ON CONFLICT (id, type) DO UPDATE
-                SET value = EXCLUDED.value`
-			if _, err := database.DB.Exec(query, metric.ID, metric.MType, *metric.Value); err != nil {
-				http.Error(rw, "Failed to update gauge in database", http.StatusInternalServerError)
-				return
-			}
-			// Получаем актуальное значение
-			var dbDelta sql.NullInt64
-			var dbValue sql.NullFloat64
-			err := database.DB.QueryRow(
-				"SELECT delta, value FROM metrics WHERE id = $1 AND type = $2",
-				metric.ID, metric.MType,
-			).Scan(&dbDelta, &dbValue)
-			if err != nil {
-				http.Error(rw, "Failed to fetch updated metric", http.StatusInternalServerError)
-				return
-			}
-			if dbDelta.Valid {
-				response.Delta = &dbDelta.Int64
-			}
-			if dbValue.Valid {
-				response.Value = &dbValue.Float64
-			}
-
-		default:
+	switch metric.MType {
+	case storage.Counter:
+		if metric.Delta == nil {
 			rw.WriteHeader(http.StatusBadRequest)
 			return
 		}
+		if err := s.UpdateMetric(metric.ID, storage.Counter, metric.Delta, nil); err != nil {
+			http.Error(rw, "Failed to update counter", http.StatusInternalServerError)
+			return
+		}
+		delta, _, err := s.GetMetric(metric.ID, storage.Counter)
+		if err != nil {
+			http.Error(rw, "Failed to fetch updated metric", http.StatusInternalServerError)
+			return
+		}
+		response.Delta = delta
 
-	} else {
-		// Существующая логика для in-memory хранилища
-		switch metric.MType {
-		case MetricTypeCounter:
-			if metric.Delta == nil {
-				rw.WriteHeader(http.StatusBadRequest)
-				return
-			}
-			mu.UpdateCounter(metric.ID, *metric.Delta)
-			if val, ok := mg.GetCounter()[response.ID]; ok {
-				response.Delta = &val
-			}
-		case MetricTypeGauge:
-			if metric.Value == nil {
-				rw.WriteHeader(http.StatusBadRequest)
-				return
-			}
-			mu.UpdateGauge(metric.ID, *metric.Value)
-			if val, ok := mg.GetGauge()[response.ID]; ok {
-				response.Value = &val
-			}
-		default:
+	case storage.Gauge:
+		if metric.Value == nil {
 			rw.WriteHeader(http.StatusBadRequest)
 			return
 		}
+		if err := s.UpdateMetric(metric.ID, storage.Gauge, nil, metric.Value); err != nil {
+			http.Error(rw, "Failed to update gauge", http.StatusInternalServerError)
+			return
+		}
+		_, value, err := s.GetMetric(metric.ID, storage.Gauge)
+		if err != nil {
+			http.Error(rw, "Failed to fetch updated metric", http.StatusInternalServerError)
+			return
+		}
+		response.Value = value
+
+	default:
+		rw.WriteHeader(http.StatusBadRequest)
+		return
 	}
 
 	rw.Header().Set("Content-Type", "application/json")
@@ -149,181 +75,104 @@ func PostMetricJSON(rw http.ResponseWriter, r *http.Request, mu metricUpdaterJSO
 }
 
 // GetMetricJSON возвращает значение метрики через JSON-запрос
-func GetMetricJSON(rw http.ResponseWriter, r *http.Request, mg metricGetterJSON) {
+func GetMetricJSON(rw http.ResponseWriter, r *http.Request, s storage.Storage) {
 	if r.Method != http.MethodPost {
 		rw.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	var metric Metrics
+	var metric storage.Metric
 	if err := json.NewDecoder(r.Body).Decode(&metric); err != nil {
 		http.Error(rw, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	var response Metrics
+	var response storage.Metric
 	response.ID = metric.ID
 	response.MType = metric.MType
 
-	if database.DB != nil {
-		delta, value, err := database.GetMetric(metric.ID, metric.MType)
-		if err != nil {
-			http.Error(rw, "Metric not found", http.StatusNotFound)
-			return
-		}
-		response.Delta = delta
-		response.Value = value
-	} else {
-		switch metric.MType {
-		case MetricTypeGauge:
-			metrics := mg.GetGauge()
-			value, ok := metrics[metric.ID]
-			if !ok {
-				http.Error(rw, "No such gauge metric "+metric.ID, http.StatusNotFound)
-				return
-			}
-			response.Value = &value
-		case MetricTypeCounter:
-			metrics := mg.GetCounter()
-			value, ok := metrics[metric.ID]
-			if !ok {
-				http.Error(rw, "No such counter metric "+metric.ID, http.StatusNotFound)
-				return
-			}
-			response.Delta = &value
-		default:
-			http.Error(rw, "No such metric type "+metric.ID, http.StatusNotFound)
-			return
-		}
+	var mType storage.MetricType
+	switch metric.MType {
+	case storage.Counter:
+		mType = storage.Counter
+	case storage.Gauge:
+		mType = storage.Gauge
+	default:
+		http.Error(rw, "No such metric type "+metric.ID, http.StatusNotFound)
+		return
 	}
 
-	rw.Header().Set("Content-Type", "application/json")
-	enc := json.NewEncoder(rw)
-	if err := enc.Encode(response); err != nil {
-		http.Error(rw, "Can`t encode response", http.StatusInternalServerError)
+	delta, value, err := s.GetMetric(metric.ID, mType)
+	if err != nil {
+		http.Error(rw, "Metric not found", http.StatusNotFound)
 		return
+	}
+
+	response.Delta = delta
+	response.Value = value
+
+	rw.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(rw).Encode(response); err != nil {
+		http.Error(rw, "Can't encode response", http.StatusInternalServerError)
 	}
 }
 
-// PostMetricsJSON обновляет множество метрик через JSON-запрос
-func PostMetricsJSON(rw http.ResponseWriter, r *http.Request, mu metricUpdaterJSON, mg metricGetterJSON) {
+// PostMetricsJSON обновляет несколько метрик через JSON-запрос
+func PostMetricsJSON(rw http.ResponseWriter, r *http.Request, s storage.Storage) {
 	if r.Method != http.MethodPost {
 		rw.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 
-	var metrics []Metrics
+	var metrics []storage.Metric
 	if err := json.NewDecoder(r.Body).Decode(&metrics); err != nil {
 		http.Error(rw, err.Error(), http.StatusBadRequest)
 		return
 	}
 
+	response := make([]storage.Metric, 0, len(metrics))
+
 	for _, metric := range metrics {
 		if metric.ID == "" || metric.MType == "" {
-			http.Error(rw, "Invalid metric format", http.StatusBadRequest)
+			continue
+		}
+
+		var mType storage.MetricType
+		switch metric.MType {
+		case storage.Counter:
+			mType = storage.Counter
+			if metric.Delta == nil {
+				continue
+			}
+		case storage.Gauge:
+			mType = storage.Gauge
+			if metric.Value == nil {
+				continue
+			}
+		default:
+			continue
+		}
+
+		if err := s.UpdateMetric(metric.ID, mType, metric.Delta, metric.Value); err != nil {
+			http.Error(rw, "Failed to update metrics", http.StatusInternalServerError)
 			return
 		}
-	}
 
-	var responses []Metrics
-
-	if database.DB != nil {
-		tx, err := database.DB.Begin()
+		delta, value, err := s.GetMetric(metric.ID, mType)
 		if err != nil {
-			http.Error(rw, "Failed to start transaction", http.StatusInternalServerError)
+			http.Error(rw, "Failed to fetch updated metric", http.StatusInternalServerError)
 			return
 		}
-		defer tx.Rollback()
 
-		for _, metric := range metrics {
-			if metric.MType == MetricTypeCounter {
-				query := `
-					INSERT INTO metrics (id, type, delta, value)
-					VALUES ($1, $2, $3, NULL)
-					ON CONFLICT (id, type) DO UPDATE
-					SET delta = metrics.delta + EXCLUDED.delta`
-				_, err := tx.Exec(query, metric.ID, metric.MType, *metric.Delta)
-				if err != nil {
-					http.Error(rw, "Failed to update counter in database", http.StatusInternalServerError)
-					return
-				}
-			} else {
-				query := `
-					INSERT INTO metrics (id, type, delta, value)
-					VALUES ($1, $2, NULL, $3)
-					ON CONFLICT (id, type) DO UPDATE
-					SET value = EXCLUDED.value`
-				_, err := tx.Exec(query, metric.ID, metric.MType, *metric.Value)
-				if err != nil {
-					http.Error(rw, "Failed to update gauge in database", http.StatusInternalServerError)
-					return
-				}
-			}
-		}
-
-		for _, metric := range metrics {
-			var delta sql.NullInt64
-			var value sql.NullFloat64
-			err := tx.QueryRow("SELECT delta, value FROM metrics WHERE id = $1 AND type = $2",
-				metric.ID, metric.MType).Scan(&delta, &value)
-			if err != nil {
-				http.Error(rw, "Failed to get updated metric from database", http.StatusInternalServerError)
-				return
-			}
-
-			response := Metrics{
-				ID:    metric.ID,
-				MType: metric.MType,
-			}
-			if delta.Valid {
-				response.Delta = &delta.Int64
-			}
-			if value.Valid {
-				response.Value = &value.Float64
-			}
-			responses = append(responses, response)
-		}
-
-		if err := tx.Commit(); err != nil {
-			http.Error(rw, "Failed to commit transaction", http.StatusInternalServerError)
-			return
-		}
-	} else {
-		for _, metric := range metrics {
-			var response Metrics
-			response.ID = metric.ID
-			response.MType = metric.MType
-
-			switch metric.MType {
-			case MetricTypeCounter:
-				if metric.Delta == nil {
-					http.Error(rw, "Invalid counter metric", http.StatusBadRequest)
-					return
-				}
-				mu.UpdateCounter(metric.ID, *metric.Delta)
-				if val, ok := mg.GetCounter()[response.ID]; ok {
-					response.Delta = &val
-				}
-			case MetricTypeGauge:
-				if metric.Value == nil {
-					http.Error(rw, "Invalid gauge metric", http.StatusBadRequest)
-					return
-				}
-				mu.UpdateGauge(metric.ID, *metric.Value)
-				if val, ok := mg.GetGauge()[response.ID]; ok {
-					response.Value = &val
-				}
-			default:
-				http.Error(rw, "Invalid metric type", http.StatusBadRequest)
-				return
-			}
-			responses = append(responses, response)
-		}
+		response = append(response, storage.Metric{
+			ID:    metric.ID,
+			MType: metric.MType,
+			Delta: delta,
+			Value: value,
+		})
 	}
 
 	rw.Header().Set("Content-Type", "application/json")
-	enc := json.NewEncoder(rw)
-	if err := enc.Encode(responses); err != nil {
-		http.Error(rw, "Can`t encode response", http.StatusInternalServerError)
-		return
+	if err := json.NewEncoder(rw).Encode(response); err != nil {
+		http.Error(rw, "Can't encode response", http.StatusInternalServerError)
 	}
 }

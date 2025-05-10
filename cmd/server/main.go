@@ -5,12 +5,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/antonminaichev/metricscollector/internal/database"
 	"github.com/antonminaichev/metricscollector/internal/logger"
-	"github.com/antonminaichev/metricscollector/internal/server/file"
-	ms "github.com/antonminaichev/metricscollector/internal/server/memstorage"
 	"github.com/antonminaichev/metricscollector/internal/server/middleware"
 	"github.com/antonminaichev/metricscollector/internal/server/router"
+	"github.com/antonminaichev/metricscollector/internal/server/storage"
+	pg "github.com/antonminaichev/metricscollector/internal/server/storage/database"
+	fs "github.com/antonminaichev/metricscollector/internal/server/storage/file"
+	ms "github.com/antonminaichev/metricscollector/internal/server/storage/memstorage"
 	"go.uber.org/zap"
 )
 
@@ -20,12 +21,8 @@ func main() {
 	}
 }
 
-// Run defines MemStorage for metrics and launch http server
+// Run defines storage for metrics and launch http server
 func run() error {
-	storage := &ms.MemStorage{
-		Gauge:   make(map[string]float64),
-		Counter: make(map[string]int64),
-	}
 	cfg, err := NewConfig()
 	if err != nil {
 		log.Fatal(err)
@@ -34,30 +31,34 @@ func run() error {
 		return err
 	}
 
+	var s storage.Storage
+
 	// Database env or flag is not empty
 	if cfg.DatabaseConnection != "" {
 		logger.Log.Info("Connecting to DB", zap.String("DSN", cfg.DatabaseConnection))
-		err = database.InitDB(cfg.DatabaseConnection)
-		if err == nil {
-			if err := database.InitMetricsTable(); err != nil {
-				logger.Log.Error("Failed to initialize metrics table", zap.Error(err))
-				cfg.DatabaseConnection = ""
-			} else {
-				logger.Log.Info("Using database storage")
-				server := &http.Server{
-					Addr:    cfg.Address,
-					Handler: logger.WithLogging(middleware.GzipHandler(router.NewRouter(storage))),
-				}
-				return server.ListenAndServe()
-			}
+		pgStorage, err := pg.NewPostgresStorage(cfg.DatabaseConnection)
+		if err != nil {
+			logger.Log.Error("Failed to connect to database", zap.Error(err))
+			return err
 		}
-		logger.Log.Info("Error connecting to DB, falling back to file storage", zap.Error(err))
+		logger.Log.Info("Using database storage")
+		s = pgStorage
+		server := &http.Server{
+			Addr:    cfg.Address,
+			Handler: logger.WithLogging(middleware.GzipHandler(router.NewRouter(s))),
+		}
+		return server.ListenAndServe()
 	}
 
 	// File storage env or flag is not empty
 	if cfg.FileStoragePath != "" {
-		fileStorage := file.NewFileStorage(storage, cfg.FileStoragePath, logger.Log)
-
+		fileStorage, err := fs.NewFileStorage(cfg.FileStoragePath, logger.Log)
+		if err != nil {
+			logger.Log.Error("Failed to initialize file storage", zap.Error(err))
+			return err
+		}
+		logger.Log.Info("Using file storage", zap.String("path", cfg.FileStoragePath))
+		s = fileStorage
 		if cfg.Restore {
 			if err := fileStorage.LoadMetrics(); err != nil {
 				logger.Log.Error("Failed to load metrics from file", zap.Error(err))
@@ -66,7 +67,7 @@ func run() error {
 
 		server := &http.Server{
 			Addr:    cfg.Address,
-			Handler: logger.WithLogging(middleware.GzipHandler(router.NewRouter(storage))),
+			Handler: logger.WithLogging(middleware.GzipHandler(router.NewRouter(s))),
 		}
 
 		go func() {
@@ -76,6 +77,7 @@ func run() error {
 			}
 		}()
 
+		// Периодически сохраняем метрики
 		for {
 			if err := fileStorage.SaveMetrics(); err != nil {
 				logger.Log.Error("Failed to save metrics to file", zap.Error(err))
@@ -84,11 +86,12 @@ func run() error {
 		}
 	}
 
-	// DSN and file storage env/flags are empty
+	// Если не указано ни файловое хранилище, ни база данных, используем RAM
 	logger.Log.Info("Using RAM storage")
+	s = ms.NewMemoryStorage()
 	server := &http.Server{
 		Addr:    cfg.Address,
-		Handler: logger.WithLogging(middleware.GzipHandler(router.NewRouter(storage))),
+		Handler: logger.WithLogging(middleware.GzipHandler(router.NewRouter(s))),
 	}
 
 	logger.Log.Info("Running server with RAM storage", zap.String("address", cfg.Address))

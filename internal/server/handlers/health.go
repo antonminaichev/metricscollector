@@ -1,17 +1,13 @@
 package handlers
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 
-	"github.com/antonminaichev/metricscollector/internal/database"
 	"github.com/antonminaichev/metricscollector/internal/retry"
+	"github.com/antonminaichev/metricscollector/internal/server/storage"
 )
-
-// MetricPrinter интерфейс для вывода метрик
-type metricPrinter interface {
-	PrintAllMetrics() string
-}
 
 // HealthCheck используется для проверки доступности сервера
 func HealthCheck(rw http.ResponseWriter, r *http.Request) {
@@ -26,15 +22,39 @@ func HealthCheck(rw http.ResponseWriter, r *http.Request) {
 }
 
 // PrintAllMetrics выводит все метрики
-func PrintAllMetrics(rw http.ResponseWriter, r *http.Request, mp metricPrinter) {
+func PrintAllMetrics(rw http.ResponseWriter, r *http.Request, s storage.Storage) {
+	counters, gauges, err := s.GetAllMetrics()
+	if err != nil {
+		http.Error(rw, "Failed to get metrics", http.StatusInternalServerError)
+		return
+	}
+
 	rw.Header().Set("Content-Type", "text/html")
 	rw.WriteHeader(http.StatusOK)
-	io.WriteString(rw, mp.PrintAllMetrics())
+
+	io.WriteString(rw, "<html><body>")
+	io.WriteString(rw, "<h1>Metrics</h1>")
+
+	io.WriteString(rw, "<h2>Counters</h2>")
+	io.WriteString(rw, "<ul>")
+	for name, value := range counters {
+		io.WriteString(rw, fmt.Sprintf("<li>%s: %d</li>", name, value))
+	}
+	io.WriteString(rw, "</ul>")
+
+	io.WriteString(rw, "<h2>Gauges</h2>")
+	io.WriteString(rw, "<ul>")
+	for name, value := range gauges {
+		io.WriteString(rw, fmt.Sprintf("<li>%s: %f</li>", name, value))
+	}
+	io.WriteString(rw, "</ul>")
+
+	io.WriteString(rw, "</body></html>")
 }
 
-func PingDatabase(w http.ResponseWriter, r *http.Request) {
+func PingDatabase(w http.ResponseWriter, r *http.Request, s storage.Storage) {
 	err := retry.Do(retry.DefaultRetryConfig(), func() error {
-		return database.PingDB()
+		return s.Ping()
 	})
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
