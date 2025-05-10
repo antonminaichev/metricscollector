@@ -1,6 +1,7 @@
 package router
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -100,10 +101,10 @@ func TestPostMetric(t *testing.T) {
 			if resp.StatusCode == http.StatusOK {
 				switch tt.metricType {
 				case "counter":
-					delta, _, _ := storage.GetMetric("testCounter", st.Counter)
+					delta, _, _ := storage.GetMetric(context.Background(), "testCounter", st.Counter)
 					assert.Equal(t, tt.value, *delta)
 				case "gauge":
-					_, value, _ := storage.GetMetric("testGauge", st.Gauge)
+					_, value, _ := storage.GetMetric(context.Background(), "testGauge", st.Gauge)
 					assert.Equal(t, tt.value, *value)
 				}
 			}
@@ -118,8 +119,8 @@ func TestGetMetric(t *testing.T) {
 
 	delta := int64(100)
 	value := float64(123.45)
-	storage.UpdateMetric("testCounter", st.Counter, &delta, nil)
-	storage.UpdateMetric("testGauge", st.Gauge, nil, &value)
+	storage.UpdateMetric(context.Background(), "testCounter", st.Counter, &delta, nil)
+	storage.UpdateMetric(context.Background(), "testGauge", st.Gauge, nil, &value)
 
 	testTable := []struct {
 		name       string
@@ -185,8 +186,8 @@ func TestPrintAllMetrics(t *testing.T) {
 
 	delta := int64(52)
 	value := float64(5432.21234)
-	storage.UpdateMetric("testCounter", st.Counter, &delta, nil)
-	storage.UpdateMetric("testGauge", st.Gauge, nil, &value)
+	storage.UpdateMetric(context.Background(), "testCounter", st.Counter, &delta, nil)
+	storage.UpdateMetric(context.Background(), "testGauge", st.Gauge, nil, &value)
 
 	resp, body := testRequest(t, ts, http.MethodGet, "/")
 	assert.Equal(t, http.StatusOK, resp.StatusCode)

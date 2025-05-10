@@ -23,7 +23,7 @@ func HealthCheck(rw http.ResponseWriter, r *http.Request) {
 
 // PrintAllMetrics выводит все метрики
 func PrintAllMetrics(rw http.ResponseWriter, r *http.Request, s storage.Storage) {
-	counters, gauges, err := s.GetAllMetrics()
+	counters, gauges, err := s.GetAllMetrics(r.Context())
 	if err != nil {
 		http.Error(rw, "Failed to get metrics", http.StatusInternalServerError)
 		return
@@ -54,7 +54,7 @@ func PrintAllMetrics(rw http.ResponseWriter, r *http.Request, s storage.Storage)
 
 func PingDatabase(w http.ResponseWriter, r *http.Request, s storage.Storage) {
 	err := retry.Do(retry.DefaultRetryConfig(), func() error {
-		return s.Ping()
+		return s.Ping(r.Context())
 	})
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

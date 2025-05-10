@@ -32,7 +32,7 @@ func PostMetric(rw http.ResponseWriter, r *http.Request, s storage.Storage) {
 			rw.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if err := s.UpdateMetric(metricName, storage.Counter, &v, nil); err != nil {
+		if err := s.UpdateMetric(r.Context(), metricName, storage.Counter, &v, nil); err != nil {
 			rw.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -42,7 +42,7 @@ func PostMetric(rw http.ResponseWriter, r *http.Request, s storage.Storage) {
 			rw.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if err := s.UpdateMetric(metricName, storage.Gauge, nil, &v); err != nil {
+		if err := s.UpdateMetric(r.Context(), metricName, storage.Gauge, nil, &v); err != nil {
 			rw.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -70,7 +70,7 @@ func GetMetric(rw http.ResponseWriter, r *http.Request, s storage.Storage) {
 		return
 	}
 
-	delta, value, err := s.GetMetric(metricName, mType)
+	delta, value, err := s.GetMetric(r.Context(), metricName, mType)
 	if err != nil {
 		http.Error(rw, "Metric not found", http.StatusNotFound)
 		return

@@ -1,5 +1,7 @@
 package storage
 
+import "context"
+
 // MetricType определяет тип метрики
 type MetricType string
 
@@ -19,14 +21,14 @@ type Metric struct {
 // Storage определяет интерфейс для хранения метрик
 type Storage interface {
 	// UpdateMetric обновляет или создает метрику
-	UpdateMetric(id string, mType MetricType, delta *int64, value *float64) error
+	UpdateMetric(ctx context.Context, id string, mType MetricType, delta *int64, value *float64) error
 
 	// GetMetric возвращает значение метрики
-	GetMetric(id string, mType MetricType) (*int64, *float64, error)
+	GetMetric(ctx context.Context, id string, mType MetricType) (*int64, *float64, error)
 
 	// GetAllMetrics возвращает все метрики
-	GetAllMetrics() (map[string]int64, map[string]float64, error)
+	GetAllMetrics(ctx context.Context) (map[string]int64, map[string]float64, error)
 
 	// Ping проверяет доступность хранилища
-	Ping() error
+	Ping(ctx context.Context) error
 }

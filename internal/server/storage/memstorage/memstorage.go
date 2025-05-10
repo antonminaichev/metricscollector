@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -22,9 +23,15 @@ func NewMemoryStorage() *MemoryStorage {
 	}
 }
 
-func (s *MemoryStorage) UpdateMetric(id string, mType storage.MetricType, delta *int64, value *float64) error {
+func (s *MemoryStorage) UpdateMetric(ctx context.Context, id string, mType storage.MetricType, delta *int64, value *float64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
 
 	switch mType {
 	case storage.Counter:
@@ -44,9 +51,15 @@ func (s *MemoryStorage) UpdateMetric(id string, mType storage.MetricType, delta 
 	return nil
 }
 
-func (s *MemoryStorage) GetMetric(id string, mType storage.MetricType) (*int64, *float64, error) {
+func (s *MemoryStorage) GetMetric(ctx context.Context, id string, mType storage.MetricType) (*int64, *float64, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+
+	select {
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	default:
+	}
 
 	switch mType {
 	case storage.Counter:
@@ -64,9 +77,15 @@ func (s *MemoryStorage) GetMetric(id string, mType storage.MetricType) (*int64, 
 	return nil, nil, fmt.Errorf("metric not found")
 }
 
-func (s *MemoryStorage) GetAllMetrics() (map[string]int64, map[string]float64, error) {
+func (s *MemoryStorage) GetAllMetrics(ctx context.Context) (map[string]int64, map[string]float64, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+
+	select {
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	default:
+	}
 
 	counters := make(map[string]int64, len(s.counters))
 	gauges := make(map[string]float64, len(s.gauges))
@@ -81,6 +100,15 @@ func (s *MemoryStorage) GetAllMetrics() (map[string]int64, map[string]float64, e
 	return counters, gauges, nil
 }
 
-func (s *MemoryStorage) Ping() error {
+func (s *MemoryStorage) Ping(ctx context.Context) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
 	return nil
 }

@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -44,9 +45,15 @@ func NewFileStorage(filePath string, logger *zap.Logger) (*FileStorage, error) {
 }
 
 // UpdateMetric обновляет или создает метрику
-func (fs *FileStorage) UpdateMetric(id string, mType storage.MetricType, delta *int64, value *float64) error {
+func (fs *FileStorage) UpdateMetric(ctx context.Context, id string, mType storage.MetricType, delta *int64, value *float64) error {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
 
 	switch mType {
 	case storage.Counter:
@@ -68,9 +75,15 @@ func (fs *FileStorage) UpdateMetric(id string, mType storage.MetricType, delta *
 }
 
 // GetMetric возвращает значение метрики
-func (fs *FileStorage) GetMetric(id string, mType storage.MetricType) (*int64, *float64, error) {
+func (fs *FileStorage) GetMetric(ctx context.Context, id string, mType storage.MetricType) (*int64, *float64, error) {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
+
+	select {
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	default:
+	}
 
 	switch mType {
 	case storage.Counter:
@@ -89,9 +102,15 @@ func (fs *FileStorage) GetMetric(id string, mType storage.MetricType) (*int64, *
 }
 
 // GetAllMetrics возвращает все метрики
-func (fs *FileStorage) GetAllMetrics() (map[string]int64, map[string]float64, error) {
+func (fs *FileStorage) GetAllMetrics(ctx context.Context) (map[string]int64, map[string]float64, error) {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
+
+	select {
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	default:
+	}
 
 	counters := make(map[string]int64, len(fs.metrics.Counters))
 	gauges := make(map[string]float64, len(fs.metrics.Gauges))
@@ -107,9 +126,15 @@ func (fs *FileStorage) GetAllMetrics() (map[string]int64, map[string]float64, er
 }
 
 // Ping проверяет доступность хранилища
-func (fs *FileStorage) Ping() error {
+func (fs *FileStorage) Ping(ctx context.Context) error {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
 
 	_, err := os.Stat(fs.filePath)
 	return err

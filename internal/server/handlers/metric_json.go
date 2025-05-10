@@ -36,11 +36,11 @@ func PostMetricJSON(rw http.ResponseWriter, r *http.Request, s storage.Storage) 
 			rw.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if err := s.UpdateMetric(metric.ID, storage.Counter, metric.Delta, nil); err != nil {
+		if err := s.UpdateMetric(r.Context(), metric.ID, storage.Counter, metric.Delta, nil); err != nil {
 			http.Error(rw, "Failed to update counter", http.StatusInternalServerError)
 			return
 		}
-		delta, _, err := s.GetMetric(metric.ID, storage.Counter)
+		delta, _, err := s.GetMetric(r.Context(), metric.ID, storage.Counter)
 		if err != nil {
 			http.Error(rw, "Failed to fetch updated metric", http.StatusInternalServerError)
 			return
@@ -52,11 +52,11 @@ func PostMetricJSON(rw http.ResponseWriter, r *http.Request, s storage.Storage) 
 			rw.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if err := s.UpdateMetric(metric.ID, storage.Gauge, nil, metric.Value); err != nil {
+		if err := s.UpdateMetric(r.Context(), metric.ID, storage.Gauge, nil, metric.Value); err != nil {
 			http.Error(rw, "Failed to update gauge", http.StatusInternalServerError)
 			return
 		}
-		_, value, err := s.GetMetric(metric.ID, storage.Gauge)
+		_, value, err := s.GetMetric(r.Context(), metric.ID, storage.Gauge)
 		if err != nil {
 			http.Error(rw, "Failed to fetch updated metric", http.StatusInternalServerError)
 			return
@@ -101,7 +101,7 @@ func GetMetricJSON(rw http.ResponseWriter, r *http.Request, s storage.Storage) {
 		return
 	}
 
-	delta, value, err := s.GetMetric(metric.ID, mType)
+	delta, value, err := s.GetMetric(r.Context(), metric.ID, mType)
 	if err != nil {
 		http.Error(rw, "Metric not found", http.StatusNotFound)
 		return
@@ -152,12 +152,12 @@ func PostMetricsJSON(rw http.ResponseWriter, r *http.Request, s storage.Storage)
 			continue
 		}
 
-		if err := s.UpdateMetric(metric.ID, mType, metric.Delta, metric.Value); err != nil {
+		if err := s.UpdateMetric(r.Context(), metric.ID, mType, metric.Delta, metric.Value); err != nil {
 			http.Error(rw, "Failed to update metrics", http.StatusInternalServerError)
 			return
 		}
 
-		delta, value, err := s.GetMetric(metric.ID, mType)
+		delta, value, err := s.GetMetric(r.Context(), metric.ID, mType)
 		if err != nil {
 			http.Error(rw, "Failed to fetch updated metric", http.StatusInternalServerError)
 			return

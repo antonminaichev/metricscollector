@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
@@ -23,7 +24,7 @@ func NewPostgresStorage(connStr string) (*PostgresStorage, error) {
 
 	storage := &PostgresStorage{db: db}
 
-	if err := storage.Ping(); err != nil {
+	if err := storage.Ping(context.Background()); err != nil {
 		return nil, err
 	}
 
@@ -50,7 +51,7 @@ func (s *PostgresStorage) initTable() error {
 	})
 }
 
-func (s *PostgresStorage) UpdateMetric(id string, mType storage.MetricType, delta *int64, value *float64) error {
+func (s *PostgresStorage) UpdateMetric(ctx context.Context, id string, mType storage.MetricType, delta *int64, value *float64) error {
 	query := `
 		INSERT INTO metrics (id, type, delta, value)
 		VALUES ($1, $2, $3, $4)
@@ -58,19 +59,19 @@ func (s *PostgresStorage) UpdateMetric(id string, mType storage.MetricType, delt
 		SET delta = $3 + metrics.delta, value = $4`
 
 	return retry.Do(retry.DefaultRetryConfig(), func() error {
-		_, err := s.db.Exec(query, id, string(mType), delta, value)
+		_, err := s.db.ExecContext(ctx, query, id, string(mType), delta, value)
 		return err
 	})
 }
 
-func (s *PostgresStorage) GetMetric(id string, mType storage.MetricType) (*int64, *float64, error) {
+func (s *PostgresStorage) GetMetric(ctx context.Context, id string, mType storage.MetricType) (*int64, *float64, error) {
 	var delta sql.NullInt64
 	var value sql.NullFloat64
 
 	query := `SELECT delta, value FROM metrics WHERE id = $1 AND type = $2`
 
 	err := retry.Do(retry.DefaultRetryConfig(), func() error {
-		return s.db.QueryRow(query, id, string(mType)).Scan(&delta, &value)
+		return s.db.QueryRowContext(ctx, query, id, string(mType)).Scan(&delta, &value)
 	})
 
 	if err != nil {
@@ -93,13 +94,13 @@ func (s *PostgresStorage) GetMetric(id string, mType storage.MetricType) (*int64
 	return deltaPtr, valuePtr, nil
 }
 
-func (s *PostgresStorage) GetAllMetrics() (map[string]int64, map[string]float64, error) {
+func (s *PostgresStorage) GetAllMetrics(ctx context.Context) (map[string]int64, map[string]float64, error) {
 	counters := make(map[string]int64)
 	gauges := make(map[string]float64)
 
 	query := `SELECT id, type, delta, value FROM metrics`
 
-	rows, err := s.db.Query(query)
+	rows, err := s.db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -129,8 +130,8 @@ func (s *PostgresStorage) GetAllMetrics() (map[string]int64, map[string]float64,
 	return counters, gauges, nil
 }
 
-func (s *PostgresStorage) Ping() error {
+func (s *PostgresStorage) Ping(ctx context.Context) error {
 	return retry.Do(retry.DefaultRetryConfig(), func() error {
-		return s.db.Ping()
+		return s.db.PingContext(ctx)
 	})
 }
