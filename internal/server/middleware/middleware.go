@@ -85,6 +85,17 @@ func HashHandler(next http.Handler, key string) http.Handler {
 
 		mac := hmac.New(sha256.New, []byte(key))
 		mac.Write(buf.Bytes())
+		if ct := hw.header.Get("Content-Type"); ct != "" {
+			w.Header().Set("Content-Type", ct)
+		}
+		for k, vals := range hw.header {
+			if strings.EqualFold(k, "Content-Type") {
+				continue
+			}
+			for _, v := range vals {
+				w.Header().Add(k, v)
+			}
+		}
 		w.Header().Set("HashSHA256", hex.EncodeToString(mac.Sum(nil)))
 		w.WriteHeader(hw.statusCode)
 		w.Write(buf.Bytes())
