@@ -29,7 +29,7 @@ func NewConfig() (*Config, error) {
 	filePath := flag.String("f", cfg.FileStoragePath, "File storage path")
 	restore := flag.Bool("r", cfg.Restore, "Restore metrics from file")
 	databaseConnection := flag.String("d", cfg.DatabaseConnection, "Database connection string")
-	hashkey := flag.String("k", cfg.HashKey, "Hash key")
+	hashkey := flag.String("k", "", "Hash key")
 
 	flag.Parse()
 
@@ -40,7 +40,9 @@ func NewConfig() (*Config, error) {
 	cfg.FileStoragePath = *filePath
 	cfg.Restore = *restore
 	cfg.DatabaseConnection = *databaseConnection
-	cfg.HashKey = *hashkey
+	if cfg.HashKey == "" {
+		cfg.HashKey = *hashkey
+	}
 
 	return cfg, nil
 }
