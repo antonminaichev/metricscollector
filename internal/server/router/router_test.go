@@ -1,13 +1,15 @@
 package router
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"testing"
 
-	ms "github.com/antonminaichev/metricscollector/internal/server/memstorage"
+	st "github.com/antonminaichev/metricscollector/internal/server/storage"
+	ms "github.com/antonminaichev/metricscollector/internal/server/storage/memstorage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,10 +30,7 @@ func testRequest(t *testing.T, ts *httptest.Server, method,
 }
 
 func TestHealthCheck(t *testing.T) {
-	storage := &ms.MemStorage{
-		Gauge:   make(map[string]float64),
-		Counter: make(map[string]int64),
-	}
+	storage := ms.NewMemoryStorage()
 	ts := httptest.NewServer(NewRouter(storage))
 	defer ts.Close()
 	var testTable = []struct {
@@ -51,10 +50,7 @@ func TestHealthCheck(t *testing.T) {
 }
 
 func TestPostMetric(t *testing.T) {
-	storage := &ms.MemStorage{
-		Gauge:   make(map[string]float64),
-		Counter: make(map[string]int64),
-	}
+	storage := ms.NewMemoryStorage()
 	ts := httptest.NewServer(NewRouter(storage))
 	defer ts.Close()
 
@@ -105,11 +101,11 @@ func TestPostMetric(t *testing.T) {
 			if resp.StatusCode == http.StatusOK {
 				switch tt.metricType {
 				case "counter":
-					value := storage.GetCounter()["testCounter"]
-					assert.Equal(t, tt.value, value)
+					delta, _, _ := storage.GetMetric(context.Background(), "testCounter", st.Counter)
+					assert.Equal(t, tt.value, *delta)
 				case "gauge":
-					value := storage.GetGauge()["testGauge"]
-					assert.Equal(t, tt.value, value)
+					_, value, _ := storage.GetMetric(context.Background(), "testGauge", st.Gauge)
+					assert.Equal(t, tt.value, *value)
 				}
 			}
 		})
@@ -117,16 +113,14 @@ func TestPostMetric(t *testing.T) {
 }
 
 func TestGetMetric(t *testing.T) {
-	storage := &ms.MemStorage{
-		Gauge:   make(map[string]float64),
-		Counter: make(map[string]int64),
-	}
-
-	storage.UpdateGauge("testGauge", 123.45)
-	storage.UpdateCounter("testCounter", 100)
-
+	storage := ms.NewMemoryStorage()
 	ts := httptest.NewServer(NewRouter(storage))
 	defer ts.Close()
+
+	delta := int64(100)
+	value := float64(123.45)
+	storage.UpdateMetric(context.Background(), "testCounter", st.Counter, &delta, nil)
+	storage.UpdateMetric(context.Background(), "testGauge", st.Gauge, nil, &value)
 
 	testTable := []struct {
 		name       string
@@ -186,15 +180,14 @@ func TestGetMetric(t *testing.T) {
 }
 
 func TestPrintAllMetrics(t *testing.T) {
-	storage := &ms.MemStorage{
-		Gauge:   make(map[string]float64),
-		Counter: make(map[string]int64),
-	}
+	storage := ms.NewMemoryStorage()
 	ts := httptest.NewServer(NewRouter(storage))
 	defer ts.Close()
 
-	storage.UpdateCounter("testCounter", 52)
-	storage.UpdateGauge("testGauge", 5432.21234)
+	delta := int64(52)
+	value := float64(5432.21234)
+	storage.UpdateMetric(context.Background(), "testCounter", st.Counter, &delta, nil)
+	storage.UpdateMetric(context.Background(), "testGauge", st.Gauge, nil, &value)
 
 	resp, body := testRequest(t, ts, http.MethodGet, "/")
 	assert.Equal(t, http.StatusOK, resp.StatusCode)

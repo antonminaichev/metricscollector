@@ -7,11 +7,12 @@ import (
 )
 
 type Config struct {
-	Address         string `env:"ADDRESS" envDefault:"localhost:8080"`
-	LogLevel        string `env:"LOG_LEVEL" envDefault:"INFO"`
-	StoreInterval   int    `env:"STORE_INTERVAL" envDefault:"300"`
-	FileStoragePath string `env:"FILE_STORAGE_PATH" envDefault:"./metrics/metrics.json"`
-	Restore         bool   `env:"RESTORE" envDefault:"true"`
+	Address            string `env:"ADDRESS" envDefault:"localhost:8080"`
+	LogLevel           string `env:"LOG_LEVEL" envDefault:"INFO"`
+	StoreInterval      int    `env:"STORE_INTERVAL" envDefault:"300"`
+	FileStoragePath    string `env:"FILE_STORAGE_PATH" envDefault:"./metrics/metrics.json"`
+	Restore            bool   `env:"RESTORE" envDefault:"true"`
+	DatabaseConnection string `env:"DATABASE_DSN"`
 }
 
 func NewConfig() (*Config, error) {
@@ -26,6 +27,7 @@ func NewConfig() (*Config, error) {
 	storeInterval := flag.Int("i", cfg.StoreInterval, "Store interval in seconds")
 	filePath := flag.String("f", cfg.FileStoragePath, "File storage path")
 	restore := flag.Bool("r", cfg.Restore, "Restore metrics from file")
+	databaseConnection := flag.String("d", cfg.DatabaseConnection, "Database connection string")
 
 	flag.Parse()
 
@@ -35,6 +37,7 @@ func NewConfig() (*Config, error) {
 	cfg.StoreInterval = *storeInterval
 	cfg.FileStoragePath = *filePath
 	cfg.Restore = *restore
+	cfg.DatabaseConnection = *databaseConnection
 
 	return cfg, nil
 }

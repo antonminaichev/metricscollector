@@ -4,42 +4,40 @@ import (
 	"net/http"
 
 	"github.com/antonminaichev/metricscollector/internal/server/handlers"
+	"github.com/antonminaichev/metricscollector/internal/server/storage"
 	"github.com/go-chi/chi"
 )
 
-// MetricRouter является составным интерфейсом для всех операций
-type metricStorage interface {
-	UpdateCounter(name string, value int64)
-	UpdateGauge(name string, value float64)
-	GetCounter() map[string]int64
-	GetGauge() map[string]float64
-	PrintAllMetrics() string
-}
-
-func NewRouter(ms metricStorage) chi.Router {
+func NewRouter(s storage.Storage) chi.Router {
 	r := chi.NewRouter()
 	r.Route("/", func(r chi.Router) {
 		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-			handlers.PrintAllMetrics(w, r, ms)
+			handlers.PrintAllMetrics(w, r, s)
+		})
+		r.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
+			handlers.PingDatabase(w, r, s)
 		})
 		r.Post("/update", func(w http.ResponseWriter, r *http.Request) {
-			handlers.PostMetricJSON(w, r, ms, ms)
+			handlers.PostMetricJSON(w, r, s)
 		})
 		r.Post("/update/", func(w http.ResponseWriter, r *http.Request) {
-			handlers.PostMetricJSON(w, r, ms, ms)
+			handlers.PostMetricJSON(w, r, s)
+		})
+		r.Post("/updates/", func(w http.ResponseWriter, r *http.Request) {
+			handlers.PostMetricsJSON(w, r, s)
 		})
 		r.Post("/value", func(w http.ResponseWriter, r *http.Request) {
-			handlers.GetMetricJSON(w, r, ms)
+			handlers.GetMetricJSON(w, r, s)
 		})
 		r.Post("/value/", func(w http.ResponseWriter, r *http.Request) {
-			handlers.GetMetricJSON(w, r, ms)
+			handlers.GetMetricJSON(w, r, s)
 		})
 		r.Get("/health", handlers.HealthCheck)
 		r.Get("/value/{type}/{metric}", func(w http.ResponseWriter, r *http.Request) {
-			handlers.GetMetric(w, r, ms)
+			handlers.GetMetric(w, r, s)
 		})
 		r.Post("/update/{type}/{metric}/{value}", func(w http.ResponseWriter, r *http.Request) {
-			handlers.PostMetric(w, r, ms)
+			handlers.PostMetric(w, r, s)
 		})
 	})
 	return r

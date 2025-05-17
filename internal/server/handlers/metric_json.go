@@ -3,111 +3,176 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/antonminaichev/metricscollector/internal/server/storage"
 )
 
-type metricUpdaterJSON interface {
-	UpdateCounter(name string, value int64)
-	UpdateGauge(name string, value float64)
-}
-
-type metricGetterJSON interface {
-	GetCounter() map[string]int64
-	GetGauge() map[string]float64
-}
-
 // PostMetricJSON обновляет значение метрики через JSON-запрос
-func PostMetricJSON(rw http.ResponseWriter, r *http.Request, mu metricUpdaterJSON, mg metricGetterJSON) {
+func PostMetricJSON(rw http.ResponseWriter, r *http.Request, s storage.Storage) {
 	if r.Method != http.MethodPost {
 		rw.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	var metric Metrics
+
+	var metric storage.Metric
 	if err := json.NewDecoder(r.Body).Decode(&metric); err != nil {
 		http.Error(rw, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	var response Metrics
-	response.ID = metric.ID
-	response.MType = metric.MType
-
+	// Базовая валидация
 	if metric.ID == "" || metric.MType == "" {
 		rw.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
+	var response storage.Metric
+	response.ID = metric.ID
+	response.MType = metric.MType
+
 	switch metric.MType {
-	case MetricTypeCounter:
+	case storage.Counter:
 		if metric.Delta == nil {
 			rw.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		mu.UpdateCounter(metric.ID, *metric.Delta)
-		if val, ok := mg.GetCounter()[response.ID]; ok {
-			response.Delta = &val
+		if err := s.UpdateMetric(r.Context(), metric.ID, storage.Counter, metric.Delta, nil); err != nil {
+			http.Error(rw, "Failed to update counter", http.StatusInternalServerError)
+			return
 		}
-	case MetricTypeGauge:
+		delta, _, err := s.GetMetric(r.Context(), metric.ID, storage.Counter)
+		if err != nil {
+			http.Error(rw, "Failed to fetch updated metric", http.StatusInternalServerError)
+			return
+		}
+		response.Delta = delta
+
+	case storage.Gauge:
 		if metric.Value == nil {
 			rw.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		mu.UpdateGauge(metric.ID, *metric.Value)
-		if val, ok := mg.GetGauge()[response.ID]; ok {
-			response.Value = &val
+		if err := s.UpdateMetric(r.Context(), metric.ID, storage.Gauge, nil, metric.Value); err != nil {
+			http.Error(rw, "Failed to update gauge", http.StatusInternalServerError)
+			return
 		}
+		_, value, err := s.GetMetric(r.Context(), metric.ID, storage.Gauge)
+		if err != nil {
+			http.Error(rw, "Failed to fetch updated metric", http.StatusInternalServerError)
+			return
+		}
+		response.Value = value
+
 	default:
 		rw.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	rw.Header().Set("Content-Type", "application/json")
-	enc := json.NewEncoder(rw)
-	if err := enc.Encode(response); err != nil {
-		http.Error(rw, "Can`t encode response", http.StatusInternalServerError)
-		return
+	if err := json.NewEncoder(rw).Encode(response); err != nil {
+		http.Error(rw, "Can't encode response", http.StatusInternalServerError)
 	}
 }
 
 // GetMetricJSON возвращает значение метрики через JSON-запрос
-func GetMetricJSON(rw http.ResponseWriter, r *http.Request, mg metricGetterJSON) {
+func GetMetricJSON(rw http.ResponseWriter, r *http.Request, s storage.Storage) {
 	if r.Method != http.MethodPost {
 		rw.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	var metric Metrics
+	var metric storage.Metric
 	if err := json.NewDecoder(r.Body).Decode(&metric); err != nil {
 		http.Error(rw, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	var response Metrics
+	var response storage.Metric
 	response.ID = metric.ID
 	response.MType = metric.MType
 
+	var mType storage.MetricType
 	switch metric.MType {
-	case MetricTypeGauge:
-		metrics := mg.GetGauge()
-		value, ok := metrics[metric.ID]
-		if !ok {
-			http.Error(rw, "No such gauge metric "+metric.ID, http.StatusNotFound)
-			return
-		}
-		response.Value = &value
-	case MetricTypeCounter:
-		metrics := mg.GetCounter()
-		value, ok := metrics[metric.ID]
-		if !ok {
-			http.Error(rw, "No such counter metric "+metric.ID, http.StatusNotFound)
-		}
-		response.Delta = &value
+	case storage.Counter:
+		mType = storage.Counter
+	case storage.Gauge:
+		mType = storage.Gauge
 	default:
 		http.Error(rw, "No such metric type "+metric.ID, http.StatusNotFound)
+		return
+	}
+
+	delta, value, err := s.GetMetric(r.Context(), metric.ID, mType)
+	if err != nil {
+		http.Error(rw, "Metric not found", http.StatusNotFound)
+		return
+	}
+
+	response.Delta = delta
+	response.Value = value
+
+	rw.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(rw).Encode(response); err != nil {
+		http.Error(rw, "Can't encode response", http.StatusInternalServerError)
+	}
+}
+
+// PostMetricsJSON обновляет несколько метрик через JSON-запрос
+func PostMetricsJSON(rw http.ResponseWriter, r *http.Request, s storage.Storage) {
+	if r.Method != http.MethodPost {
+		rw.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	var metrics []storage.Metric
+	if err := json.NewDecoder(r.Body).Decode(&metrics); err != nil {
+		http.Error(rw, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	response := make([]storage.Metric, 0, len(metrics))
+
+	for _, metric := range metrics {
+		if metric.ID == "" || metric.MType == "" {
+			continue
+		}
+
+		var mType storage.MetricType
+		switch metric.MType {
+		case storage.Counter:
+			mType = storage.Counter
+			if metric.Delta == nil {
+				continue
+			}
+		case storage.Gauge:
+			mType = storage.Gauge
+			if metric.Value == nil {
+				continue
+			}
+		default:
+			continue
+		}
+
+		if err := s.UpdateMetric(r.Context(), metric.ID, mType, metric.Delta, metric.Value); err != nil {
+			http.Error(rw, "Failed to update metrics", http.StatusInternalServerError)
+			return
+		}
+
+		delta, value, err := s.GetMetric(r.Context(), metric.ID, mType)
+		if err != nil {
+			http.Error(rw, "Failed to fetch updated metric", http.StatusInternalServerError)
+			return
+		}
+
+		response = append(response, storage.Metric{
+			ID:    metric.ID,
+			MType: metric.MType,
+			Delta: delta,
+			Value: value,
+		})
 	}
 
 	rw.Header().Set("Content-Type", "application/json")
-	enc := json.NewEncoder(rw)
-	if err := enc.Encode(response); err != nil {
-		http.Error(rw, "Can`t encode response", http.StatusInternalServerError)
-		return
+	if err := json.NewEncoder(rw).Encode(response); err != nil {
+		http.Error(rw, "Can't encode response", http.StatusInternalServerError)
 	}
 }
