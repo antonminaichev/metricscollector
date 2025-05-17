@@ -28,7 +28,7 @@ func run() error {
 
 	// Запускаем функции параллельно
 	go agent.CollectMetrics(cfg.PollInterval)
-	go agent.PostMetricsBatch(client, cfg.ReportInterval, cfg.Address)
+	go agent.PostMetricsBatch(client, cfg.ReportInterval, cfg.Address, cfg.HashKey)
 
 	// Ждем сигнала завершения
 	<-sigChan

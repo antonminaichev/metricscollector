@@ -13,6 +13,7 @@ type Config struct {
 	FileStoragePath    string `env:"FILE_STORAGE_PATH" envDefault:"./metrics/metrics.json"`
 	Restore            bool   `env:"RESTORE" envDefault:"true"`
 	DatabaseConnection string `env:"DATABASE_DSN"`
+	HashKey            string `env:"KEY"`
 }
 
 func NewConfig() (*Config, error) {
@@ -28,6 +29,7 @@ func NewConfig() (*Config, error) {
 	filePath := flag.String("f", cfg.FileStoragePath, "File storage path")
 	restore := flag.Bool("r", cfg.Restore, "Restore metrics from file")
 	databaseConnection := flag.String("d", cfg.DatabaseConnection, "Database connection string")
+	hashkey := flag.String("k", cfg.HashKey, "Hash key")
 
 	flag.Parse()
 
@@ -38,6 +40,7 @@ func NewConfig() (*Config, error) {
 	cfg.FileStoragePath = *filePath
 	cfg.Restore = *restore
 	cfg.DatabaseConnection = *databaseConnection
+	cfg.HashKey = *hashkey
 
 	return cfg, nil
 }

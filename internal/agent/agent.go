@@ -3,6 +3,9 @@ package agent
 import (
 	"bytes"
 	"compress/gzip"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -53,6 +56,12 @@ var metrics = []Metrics{
 	{"TotalAlloc", "gauge", nil, nil, func(m *runtime.MemStats) float64 { return float64(m.TotalAlloc) }},
 	{"PollCount", "counter", new(int64), nil, nil},
 	{"RandomValue", "gauge", nil, nil, nil},
+}
+
+func calculateHash(buf *bytes.Buffer, key string) string {
+	mac := hmac.New(sha256.New, []byte(key))
+	mac.Write(buf.Bytes())
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 // checkServerAvailability is used for checking server availability
@@ -171,7 +180,7 @@ func PostMetric(client *http.Client, reportInterval int, host string) {
 }
 
 // PostMetricJSON is used for sending metrics to server via JSON request
-func PostMetricJSON(client *http.Client, reportInterval int, host string) {
+func PostMetricJSON(client *http.Client, reportInterval int, host string, hashkey string) {
 	if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {
 		host = "http://" + host
 	}
@@ -194,6 +203,7 @@ func PostMetricJSON(client *http.Client, reportInterval int, host string) {
 				log.Printf("Error encoding JSON for %s: %v", m.ID, err)
 				continue
 			}
+
 			buf := bytes.NewBuffer(nil)
 			zb, err := gzip.NewWriterLevel(buf, gzip.BestSpeed)
 			if err != nil {
@@ -202,22 +212,24 @@ func PostMetricJSON(client *http.Client, reportInterval int, host string) {
 			}
 			_, err = zb.Write(jsonBody)
 			if err != nil {
-				log.Printf("Unable to zip data")
+				log.Printf("Error compressing data for %s: %v", m.ID, err)
 				continue
 			}
-			err = zb.Close()
-			if err != nil {
-				log.Printf("Unable to close zip writer")
-				continue
-			}
+			zb.Close()
 			req, err := http.NewRequest(http.MethodPost, url, buf)
 			if err != nil {
 				log.Printf("Error creating request for %s: %v", m.ID, err)
 				continue
 			}
-			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("Content-Encoding", "gzip")
-
+			if hashkey != "" {
+				hashValue := calculateHash(buf, hashkey)
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("HashSHA256", hashValue)
+				req.Header.Set("Content-Encoding", "gzip")
+			} else {
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Content-Encoding", "gzip")
+			}
 			err = retry.Do(retry.DefaultRetryConfig(), func() error {
 				resp, err := client.Do(req)
 				if err != nil {
@@ -231,7 +243,6 @@ func PostMetricJSON(client *http.Client, reportInterval int, host string) {
 				continue
 			}
 		}
-
 		reportCount++
 		log.Printf("Current report count: %d", reportCount)
 		time.Sleep(time.Duration(reportInterval) * time.Second)
@@ -239,7 +250,7 @@ func PostMetricJSON(client *http.Client, reportInterval int, host string) {
 }
 
 // PostMetricsBatch is used for sending metrics to server via JSON request by batches
-func PostMetricsBatch(client *http.Client, reportInterval int, host string) {
+func PostMetricsBatch(client *http.Client, reportInterval int, host string, hashkey string) {
 	if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {
 		host = "http://" + host
 	}
@@ -304,8 +315,16 @@ func PostMetricsBatch(client *http.Client, reportInterval int, host string) {
 			log.Printf("Error creating batch request: %v", err)
 			continue
 		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Content-Encoding", "gzip")
+		if hashkey != "" {
+			hashValue := calculateHash(buf, hashkey)
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("HashSHA256", hashValue)
+			req.Header.Set("Content-Encoding", "gzip")
+			log.Printf("Hash is %s", hashValue)
+		} else {
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Content-Encoding", "gzip")
+		}
 
 		err = retry.Do(retry.DefaultRetryConfig(), func() error {
 			resp, err := client.Do(req)
