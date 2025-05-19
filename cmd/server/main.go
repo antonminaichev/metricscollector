@@ -45,7 +45,7 @@ func run() error {
 		s = pgStorage
 		server := &http.Server{
 			Addr:    cfg.Address,
-			Handler: logger.WithLogging(middleware.GzipHandler(router.NewRouter(s))),
+			Handler: logger.WithLogging(middleware.HashHandler(middleware.GzipHandler(router.NewRouter(s)), cfg.HashKey)),
 		}
 		return server.ListenAndServe()
 	}
@@ -67,7 +67,7 @@ func run() error {
 
 		server := &http.Server{
 			Addr:    cfg.Address,
-			Handler: logger.WithLogging(middleware.GzipHandler(router.NewRouter(s))),
+			Handler: logger.WithLogging(middleware.HashHandler(middleware.GzipHandler(router.NewRouter(s)), cfg.HashKey)),
 		}
 
 		go func() {
@@ -91,7 +91,7 @@ func run() error {
 	s = ms.NewMemoryStorage()
 	server := &http.Server{
 		Addr:    cfg.Address,
-		Handler: logger.WithLogging(middleware.GzipHandler(router.NewRouter(s))),
+		Handler: logger.WithLogging(middleware.HashHandler(middleware.GzipHandler(router.NewRouter(s)), cfg.HashKey)),
 	}
 
 	logger.Log.Info("Running server with RAM storage", zap.String("address", cfg.Address))
