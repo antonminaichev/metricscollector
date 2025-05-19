@@ -93,33 +93,30 @@ func checkServerAvailability(host string) bool {
 
 // CollectMetrics is used metric collection
 func CollectMetrics(pollInterval int, jobs chan<- Metrics) {
-	log.Printf("Poll interval: %d sec", pollInterval)
-
-	var runtimeMetrics runtime.MemStats
 	ticker := time.NewTicker(time.Duration(pollInterval) * time.Second)
 	defer ticker.Stop()
+	var rt runtime.MemStats
+	var pc int64
 	for range ticker.C {
-		runtime.ReadMemStats(&runtimeMetrics)
-
-		for i := range metrics {
-			m := metrics[i]
-			switch m.MType {
-			case "gauge":
-				if m.getValue != nil {
-					val := m.getValue(&runtimeMetrics)
-					m.Value = &val
-				} else if m.ID == "RandomValue" {
-					val := rand.Float64()
-					m.Value = &val
-				}
-				jobs <- m
-			case "counter":
-				if m.ID == "PollCount" && m.Delta != nil {
-					*m.Delta++
-					jobs <- m
-				}
+		runtime.ReadMemStats(&rt)
+		// send gauges
+		for _, mDef := range metrics {
+			if mDef.MType != "gauge" {
+				continue
+			}
+			// collect value
+			if mDef.getValue != nil {
+				val := mDef.getValue(&rt)
+				jobs <- Metrics{ID: mDef.ID, MType: mDef.MType, Value: &val}
+			} else if mDef.ID == "RandomValue" {
+				val := rand.Float64()
+				jobs <- Metrics{ID: mDef.ID, MType: mDef.MType, Value: &val}
 			}
 		}
+		// send counter
+		pc++
+		delta := pc
+		jobs <- Metrics{ID: "PollCount", MType: "counter", Delta: &delta}
 	}
 }
 
@@ -173,233 +170,6 @@ func MetricWorker(client *http.Client, host, hashkey string, jobs <-chan Metrics
 			}
 			return err
 		})
-		time.Sleep(time.Duration(reportInterval) * time.Second)
-	}
-}
-
-// PostMetric is used for sending metrics to server
-func PostMetric(client *http.Client, reportInterval int, host string) {
-	if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {
-		host = "http://" + host
-	}
-	log.Printf("Report Interval: %d sec", reportInterval)
-	log.Printf("Host: %s", host)
-
-	for !checkServerAvailability(host) {
-		log.Printf("Server unreachable, retry in 5 seconds...")
-		time.Sleep(5 * time.Second)
-	}
-	log.Printf("Server %s is reachable", host)
-
-	reportCount := 0
-
-	for {
-		for _, m := range metrics {
-			var valueStr string
-			switch m.MType {
-			case "gauge":
-				if m.Value == nil {
-					continue
-				}
-				valueStr = fmt.Sprintf("%f", *m.Value)
-			case "counter":
-				if m.Delta == nil {
-					continue
-				}
-				valueStr = fmt.Sprintf("%d", *m.Delta)
-			default:
-				continue
-			}
-
-			url := fmt.Sprintf("%s/update/%s/%s/%s", host, m.MType, m.ID, valueStr)
-			req, err := http.NewRequest(http.MethodPost, url, nil)
-			if err != nil {
-				log.Printf("Error creating request for %s: %v", m.ID, err)
-				continue
-			}
-			req.Header.Set("Content-Type", "text/plain")
-
-			err = retry.Do(retry.DefaultRetryConfig(), func() error {
-				resp, err := client.Do(req)
-				if err != nil {
-					return err
-				}
-				defer resp.Body.Close()
-				return nil
-			})
-			if err != nil {
-				log.Printf("Error sending request for %s after retries: %v", m.ID, err)
-				continue
-			}
-		}
-		reportCount++
-		log.Printf("Current report count: %d", reportCount)
-		time.Sleep(time.Duration(reportInterval) * time.Second)
-	}
-}
-
-// PostMetricJSON is used for sending metrics to server via JSON request
-func PostMetricJSON(client *http.Client, reportInterval int, host string, hashkey string) {
-	if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {
-		host = "http://" + host
-	}
-	log.Printf("Report Interval: %d sec", reportInterval)
-	log.Printf("Host: %s", host)
-
-	for !checkServerAvailability(host) {
-		log.Printf("Server unreachable, retry in 5 seconds...")
-		time.Sleep(5 * time.Second)
-	}
-	log.Printf("Server %s is reachable", host)
-
-	reportCount := 0
-
-	for {
-		for _, m := range metrics {
-			url := fmt.Sprintf("%s/update", host)
-			jsonBody, err := json.Marshal(m)
-			if err != nil {
-				log.Printf("Error encoding JSON for %s: %v", m.ID, err)
-				continue
-			}
-
-			buf := bytes.NewBuffer(nil)
-			zb, err := gzip.NewWriterLevel(buf, gzip.BestSpeed)
-			if err != nil {
-				log.Printf("Unable to create gzip writer")
-				continue
-			}
-			_, err = zb.Write(jsonBody)
-			if err != nil {
-				log.Printf("Error compressing data for %s: %v", m.ID, err)
-				continue
-			}
-			zb.Close()
-			req, err := http.NewRequest(http.MethodPost, url, buf)
-			if err != nil {
-				log.Printf("Error creating request for %s: %v", m.ID, err)
-				continue
-			}
-			if hashkey != "" {
-				hashValue := calculateHash(buf, hashkey)
-				req.Header.Set("Content-Type", "application/json")
-				req.Header.Set("HashSHA256", hashValue)
-				req.Header.Set("Content-Encoding", "gzip")
-			} else {
-				req.Header.Set("Content-Type", "application/json")
-				req.Header.Set("Content-Encoding", "gzip")
-			}
-			err = retry.Do(retry.DefaultRetryConfig(), func() error {
-				resp, err := client.Do(req)
-				if err != nil {
-					return err
-				}
-				defer resp.Body.Close()
-				return nil
-			})
-			if err != nil {
-				log.Printf("Error sending request for %s after retries: %v", m.ID, err)
-				continue
-			}
-		}
-		reportCount++
-		log.Printf("Current report count: %d", reportCount)
-		time.Sleep(time.Duration(reportInterval) * time.Second)
-	}
-}
-
-// PostMetricsBatch is used for sending metrics to server via JSON request by batches
-func PostMetricsBatch(client *http.Client, reportInterval int, host string, hashkey string) {
-	if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {
-		host = "http://" + host
-	}
-	log.Printf("Report Interval: %d sec", reportInterval)
-	log.Printf("Host: %s", host)
-
-	for !checkServerAvailability(host) {
-		log.Printf("Server unreachable, retry in 5 seconds...")
-		time.Sleep(5 * time.Second)
-	}
-	log.Printf("Server %s is reachable", host)
-
-	reportCount := 0
-
-	for {
-		var metricsBatch []Metrics
-		for _, m := range metrics {
-			metric := Metrics{
-				ID:    m.ID,
-				MType: m.MType,
-			}
-			if m.MType == "counter" && m.Delta != nil {
-				metric.Delta = m.Delta
-			} else if m.MType == "gauge" && m.Value != nil {
-				metric.Value = m.Value
-			}
-			metricsBatch = append(metricsBatch, metric)
-		}
-
-		if len(metricsBatch) == 0 {
-			log.Printf("No metrics to send, skipping batch")
-			time.Sleep(time.Duration(reportInterval) * time.Second)
-			continue
-		}
-
-		url := fmt.Sprintf("%s/updates/", host)
-		jsonBody, err := json.Marshal(metricsBatch)
-		if err != nil {
-			log.Printf("Error encoding JSON batch: %v", err)
-			continue
-		}
-
-		buf := bytes.NewBuffer(nil)
-		zb, err := gzip.NewWriterLevel(buf, gzip.BestSpeed)
-		if err != nil {
-			log.Printf("Unable to create gzip writer: %v", err)
-			continue
-		}
-		_, err = zb.Write(jsonBody)
-		if err != nil {
-			log.Printf("Unable to zip data: %v", err)
-			continue
-		}
-		err = zb.Close()
-		if err != nil {
-			log.Printf("Unable to close zip writer: %v", err)
-			continue
-		}
-
-		req, err := http.NewRequest(http.MethodPost, url, buf)
-		if err != nil {
-			log.Printf("Error creating batch request: %v", err)
-			continue
-		}
-		if hashkey != "" {
-			hashValue := calculateHash(buf, hashkey)
-			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("HashSHA256", hashValue)
-			req.Header.Set("Content-Encoding", "gzip")
-			log.Printf("Hash is %s", hashValue)
-		} else {
-			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("Content-Encoding", "gzip")
-		}
-
-		err = retry.Do(retry.DefaultRetryConfig(), func() error {
-			resp, err := client.Do(req)
-			if err != nil {
-				return err
-			}
-			defer resp.Body.Close()
-			return nil
-		})
-		if err != nil {
-			log.Printf("Error sending batch request after retries: %v", err)
-			continue
-		}
-
-		reportCount++
-		log.Printf("Current report count: %d", reportCount)
 		time.Sleep(time.Duration(reportInterval) * time.Second)
 	}
 }

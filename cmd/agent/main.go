@@ -23,7 +23,7 @@ func run() error {
 	if err != nil {
 		log.Fatal(err)
 	}
-	jobs := make(chan agent.Metrics, cfg.RateLimit*4)
+	jobs := make(chan agent.Metrics, cfg.RateLimit*3)
 
 	go agent.CollectMetrics(cfg.PollInterval, jobs)
 	go agent.CollectSystemMetrics(cfg.PollInterval, jobs)
