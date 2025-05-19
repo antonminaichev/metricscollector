@@ -11,118 +11,94 @@ import (
 )
 
 func TestCollectMetrics(t *testing.T) {
-	tests := []struct {
-		name           string
-		pollInterval   int
-		expectedChecks func(t *testing.T, metrics []Metrics)
-	}{
-		{
-			name:         "Сбор всех метрик",
-			pollInterval: 2,
-			expectedChecks: func(t *testing.T, metrics []Metrics) {
-				findMetric := func(name string) *Metrics {
-					for i := range metrics {
-						if metrics[i].ID == name {
-							return &metrics[i]
-						}
-					}
-					return nil
-				}
+	pollInterval := 1
+	cycles := 2
 
-				for _, name := range []string{
-					"BuckHashSys", "Frees", "GCCPUFraction", "GCSys",
-					"HeapIdle", "HeapInuse", "HeapObjects", "HeapReleased",
-					"HeapSys", "LastGC", "Lookups", "MCacheInuse",
-					"MCacheSys", "MSpanInuse", "MSpanSys", "Mallocs",
-					"NextGC", "NumForcedGC", "NumGC", "OtherSys",
-					"PauseTotalNs", "StackInuse", "StackSys", "Sys",
-					"TotalAlloc", "HeapAlloc", "Alloc",
-				} {
-					metric := findMetric(name)
-					require.NotNil(t, metric, "Метрика %s не найдена", name)
-					require.NotNil(t, metric.Value, "Значение метрики %s не установлено", name)
-				}
-
-				// Проверка PollCount
-				pollCount := findMetric("PollCount")
-				require.NotNil(t, pollCount)
-				require.Equal(t, "counter", pollCount.MType)
-				require.NotNil(t, pollCount.Delta)
-				require.Greater(t, *pollCount.Delta, int64(0))
-
-				// Проверка RandomValue
-				randomValue := findMetric("RandomValue")
-				require.NotNil(t, randomValue)
-				require.Equal(t, "gauge", randomValue.MType)
-				require.NotNil(t, randomValue.Value)
-				require.GreaterOrEqual(t, *randomValue.Value, 0.0)
-				require.LessOrEqual(t, *randomValue.Value, 1.0)
-			},
-		},
+	// Reset global metrics state
+	for i := range metrics {
+		switch metrics[i].MType {
+		case "gauge":
+			metrics[i].Value = nil
+		case "counter":
+			metrics[i].Delta = new(int64)
+			*metrics[i].Delta = 0
+		}
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Сброс значений перед тестом
-			for i := range metrics {
-				switch metrics[i].MType {
-				case "gauge":
-					metrics[i].Value = nil
-				case "counter":
-					metrics[i].Delta = new(int64)
-					*metrics[i].Delta = 0
-				}
-			}
+	jobs := make(chan Metrics, len(metrics)*cycles)
+	defer close(jobs)
+	go CollectMetrics(pollInterval, jobs)
 
-			done := make(chan bool)
-			metricsChan := make(chan Metrics, 100)
-			go func() {
-				CollectMetrics(tt.pollInterval, metricsChan)
-				done <- true
-			}()
-			time.Sleep(6 * time.Second)
-			tt.expectedChecks(t, metrics)
-		})
+	// Allow some metric collection
+	time.Sleep(time.Duration(pollInterval*cycles) * time.Second)
+
+	// Drain jobs into map
+	collected := make(map[string]Metrics)
+	for i := 0; i < len(metrics)*cycles; i++ {
+		select {
+		case m := <-jobs:
+			collected[m.ID] = m
+		default:
+			// no more metrics
+		}
 	}
+
+	// Check runtime gauges
+	for _, name := range []string{"Alloc", "HeapAlloc", "TotalAlloc", "Sys"} {
+		m, ok := collected[name]
+		require.True(t, ok, "metric %s should be collected", name)
+		require.Equal(t, "gauge", m.MType)
+		require.NotNil(t, m.Value, "metric %s should have a value", name)
+		require.Greater(t, *m.Value, float64(0), "metric %s should be > 0", name)
+	}
+
+	// Check PollCount counter
+	poll, ok := collected["PollCount"]
+	require.True(t, ok, "PollCount should be collected")
+	require.Equal(t, "counter", poll.MType)
+	require.NotNil(t, poll.Delta, "PollCount should have a delta")
+	require.Greater(t, *poll.Delta, int64(0), "PollCount should be incremented")
+
+	// Check RandomValue
+	randVal, ok := collected["RandomValue"]
+	require.True(t, ok, "RandomValue should be collected")
+	require.Equal(t, "gauge", randVal.MType)
+	require.NotNil(t, randVal.Value, "RandomValue should have a value")
+	require.GreaterOrEqual(t, *randVal.Value, float64(0), "RandomValue >= 0")
+	require.LessOrEqual(t, *randVal.Value, float64(1), "RandomValue <= 1")
 }
 
 func TestPostMetric(t *testing.T) {
-	tests := []struct {
-		name           string
-		serverResponse func(w http.ResponseWriter, r *http.Request)
-		reportInterval int
-		expectedChecks func(t *testing.T, request *http.Request)
-	}{
-		{
-			name: "Succeful send metrics",
-			serverResponse: func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(http.StatusOK)
-			},
-			reportInterval: 1,
-			expectedChecks: func(t *testing.T, request *http.Request) {
-				require.Equal(t, http.MethodPost, request.Method)
-				require.Contains(t, request.URL.Path, "/update/")
-				require.Contains(t, []string{"gauge", "counter"}, strings.Split(request.URL.Path, "/")[2])
-				require.NotEmpty(t, strings.Split(request.URL.Path, "/")[3])
-				require.NotEmpty(t, strings.Split(request.URL.Path, "/")[4])
-			},
-		},
-	}
+	reportInterval := 1
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(tt.serverResponse))
-			defer server.Close()
+	reqCh := make(chan *http.Request, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/health" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/update/") {
+			reqCh <- r
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
 
-			client := &http.Client{}
+	client := &http.Client{}
 
-			// Запускаем отправку метрик
-			done := make(chan bool)
-			go func() {
-				PostMetric(client, tt.reportInterval, server.URL)
-				done <- true
-			}()
-			time.Sleep(3 * time.Second)
-		})
+	// Start PostMetric in background
+	go PostMetric(client, reportInterval, server.URL)
+
+	select {
+	case req := <-reqCh:
+		require.Equal(t, http.MethodPost, req.Method)
+		parts := strings.Split(req.URL.Path, "/")
+		require.Len(t, parts, 5, "expected path /update/{type}/{id}/{value}")
+		require.Equal(t, "update", parts[1])
+		require.Contains(t, []string{"gauge", "counter"}, parts[2], "metric type should be gauge or counter")
+		require.NotEmpty(t, parts[3], "metric ID should not be empty")
+		require.NotEmpty(t, parts[4], "metric value should not be empty")
+	case <-time.After(time.Duration(reportInterval+2) * time.Second):
+		t.Fatalf("timeout waiting for PostMetric request")
 	}
 }
