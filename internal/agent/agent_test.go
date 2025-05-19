@@ -75,8 +75,9 @@ func TestCollectMetrics(t *testing.T) {
 			}
 
 			done := make(chan bool)
+			metricsChan := make(chan Metrics, 100)
 			go func() {
-				CollectMetrics(tt.pollInterval)
+				CollectMetrics(tt.pollInterval, metricsChan)
 				done <- true
 			}()
 			time.Sleep(6 * time.Second)

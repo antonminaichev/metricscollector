@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/antonminaichev/metricscollector/internal/retry"
+	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/mem"
 )
 
 type Metrics struct {
@@ -90,15 +92,17 @@ func checkServerAvailability(host string) bool {
 }
 
 // CollectMetrics is used metric collection
-func CollectMetrics(pollInterval int) {
+func CollectMetrics(pollInterval int, jobs chan<- Metrics) {
 	log.Printf("Poll interval: %d sec", pollInterval)
 
 	var runtimeMetrics runtime.MemStats
-	for {
+	ticker := time.NewTicker(time.Duration(pollInterval) * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
 		runtime.ReadMemStats(&runtimeMetrics)
 
 		for i := range metrics {
-			m := &metrics[i]
+			m := metrics[i]
 			switch m.MType {
 			case "gauge":
 				if m.getValue != nil {
@@ -108,13 +112,68 @@ func CollectMetrics(pollInterval int) {
 					val := rand.Float64()
 					m.Value = &val
 				}
+				jobs <- m
 			case "counter":
 				if m.ID == "PollCount" && m.Delta != nil {
 					*m.Delta++
+					jobs <- m
 				}
 			}
 		}
-		time.Sleep(time.Duration(pollInterval) * time.Second)
+	}
+}
+
+func CollectSystemMetrics(pollInterval int, jobs chan<- Metrics) {
+	ticker := time.NewTicker(time.Duration(pollInterval) * time.Second)
+	defer ticker.Stop()
+	cpuCount, _ := cpu.Counts(true)
+	for range ticker.C {
+		// Memory metrics
+		if vm, err := mem.VirtualMemory(); err == nil {
+			tot := float64(vm.Total)
+			free := float64(vm.Free)
+			jobs <- Metrics{ID: "TotalMemory", MType: "gauge", Value: &tot}
+			jobs <- Metrics{ID: "FreeMemory", MType: "gauge", Value: &free}
+		}
+
+		// CPU utilization per core
+		if pct, err := cpu.Percent(0, true); err == nil {
+			for i := 0; i < cpuCount && i < len(pct); i++ {
+				v := pct[i]
+				jobs <- Metrics{ID: fmt.Sprintf("CPUutilization%d", i), MType: "gauge", Value: &v}
+			}
+		}
+	}
+}
+
+func MetricWorker(client *http.Client, host, hashkey string, jobs <-chan Metrics, reportInterval int) {
+	if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {
+		host = "http://" + host
+	}
+	for m := range jobs {
+		buf := bytes.NewBuffer(nil)
+		gw, _ := gzip.NewWriterLevel(buf, gzip.BestSpeed)
+		data, _ := json.Marshal(m)
+		gw.Write(data)
+		gw.Close()
+
+		// send
+		url := fmt.Sprintf("%s/update", host)
+		req, _ := http.NewRequest(http.MethodPost, url, buf)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Encoding", "gzip")
+		if hashkey != "" {
+			req.Header.Set("HashSHA256", calculateHash(buf, hashkey))
+		}
+
+		retry.Do(retry.DefaultRetryConfig(), func() error {
+			resp, err := client.Do(req)
+			if err == nil {
+				resp.Body.Close()
+			}
+			return err
+		})
+		time.Sleep(time.Duration(reportInterval) * time.Second)
 	}
 }
 
