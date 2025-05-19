@@ -9,8 +9,8 @@ import (
 type Config struct {
 	Address        string `env:"ADDRESS" envDefault:"localhost:8080"`
 	PollInterval   int    `env:"POLL_INTERVAL" envDefault:"2"`
-	ReportInterval int    `env:"REPORT_INTERVAL" envDefault:"10"`
-	RateLimit      int    `env:"RATE_LIMIT" envDefault:"3"`
+	ReportInterval int    `env:"REPORT_INTERVAL" envDefault:"2"`
+	RateLimit      int    `env:"RATE_LIMIT" envDefault:"30"`
 	HashKey        string `env:"KEY"`
 }
 
