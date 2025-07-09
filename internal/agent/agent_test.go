@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"runtime"
 	"testing"
 	"time"
@@ -13,8 +14,11 @@ func TestCollectMetrics(t *testing.T) {
 	pollInterval := 1
 	jobs := make(chan Metrics, len(metrics)+5)
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// start collection
-	go CollectMetrics(pollInterval, jobs)
+	go CollectMetrics(ctx, pollInterval, jobs)
 
 	// wait for required metrics
 	var (
