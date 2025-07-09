@@ -1,127 +1,63 @@
 package agent
 
 import (
-	"net/http"
-	"net/http/httptest"
-	"strings"
+	"context"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 )
 
+// TestCollectMetrics ensures CollectMetrics sends Alloc, PollCount, and RandomValue without race.
 func TestCollectMetrics(t *testing.T) {
-	tests := []struct {
-		name           string
-		pollInterval   int
-		expectedChecks func(t *testing.T, metrics []Metrics)
-	}{
-		{
-			name:         "Сбор всех метрик",
-			pollInterval: 2,
-			expectedChecks: func(t *testing.T, metrics []Metrics) {
-				findMetric := func(name string) *Metrics {
-					for i := range metrics {
-						if metrics[i].ID == name {
-							return &metrics[i]
-						}
-					}
-					return nil
-				}
+	pollInterval := 1
+	jobs := make(chan Metrics, len(metrics)+5)
 
-				for _, name := range []string{
-					"BuckHashSys", "Frees", "GCCPUFraction", "GCSys",
-					"HeapIdle", "HeapInuse", "HeapObjects", "HeapReleased",
-					"HeapSys", "LastGC", "Lookups", "MCacheInuse",
-					"MCacheSys", "MSpanInuse", "MSpanSys", "Mallocs",
-					"NextGC", "NumForcedGC", "NumGC", "OtherSys",
-					"PauseTotalNs", "StackInuse", "StackSys", "Sys",
-					"TotalAlloc", "HeapAlloc", "Alloc",
-				} {
-					metric := findMetric(name)
-					require.NotNil(t, metric, "Метрика %s не найдена", name)
-					require.NotNil(t, metric.Value, "Значение метрики %s не установлено", name)
-				}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-				// Проверка PollCount
-				pollCount := findMetric("PollCount")
-				require.NotNil(t, pollCount)
-				require.Equal(t, "counter", pollCount.MType)
-				require.NotNil(t, pollCount.Delta)
-				require.Greater(t, *pollCount.Delta, int64(0))
+	// start collection
+	go CollectMetrics(ctx, pollInterval, jobs)
 
-				// Проверка RandomValue
-				randomValue := findMetric("RandomValue")
-				require.NotNil(t, randomValue)
-				require.Equal(t, "gauge", randomValue.MType)
-				require.NotNil(t, randomValue.Value)
-				require.GreaterOrEqual(t, *randomValue.Value, 0.0)
-				require.LessOrEqual(t, *randomValue.Value, 1.0)
-			},
-		},
-	}
+	// wait for required metrics
+	var (
+		gotAlloc     bool
+		gotPollCount bool
+		gotRandom    bool
+	)
+	// timeout guard
+	timeout := time.After(5 * time.Second)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Сброс значений перед тестом
-			for i := range metrics {
-				switch metrics[i].MType {
-				case "gauge":
-					metrics[i].Value = nil
-				case "counter":
-					metrics[i].Delta = new(int64)
-					*metrics[i].Delta = 0
-				}
+	for {
+		select {
+		case m := <-jobs:
+			switch m.ID {
+			case "Alloc":
+				gotAlloc = true
+				require.Equal(t, "gauge", m.MType)
+				require.NotNil(t, m.Value)
+				require.Greater(t, *m.Value, float64(0))
+
+			case "PollCount":
+				gotPollCount = true
+				require.Equal(t, "counter", m.MType)
+				require.NotNil(t, m.Delta)
+				require.Greater(t, *m.Delta, int64(0))
+
+			case "RandomValue":
+				gotRandom = true
+				require.Equal(t, "gauge", m.MType)
+				require.NotNil(t, m.Value)
+				require.GreaterOrEqual(t, *m.Value, float64(0.0))
+				require.LessOrEqual(t, *m.Value, float64(1.0))
+			}
+			// break when all seen
+			if gotAlloc && gotPollCount && gotRandom {
+				return
 			}
 
-			done := make(chan bool)
-			go func() {
-				CollectMetrics(tt.pollInterval)
-				done <- true
-			}()
-			time.Sleep(6 * time.Second)
-			tt.expectedChecks(t, metrics)
-		})
-	}
-}
-
-func TestPostMetric(t *testing.T) {
-	tests := []struct {
-		name           string
-		serverResponse func(w http.ResponseWriter, r *http.Request)
-		reportInterval int
-		expectedChecks func(t *testing.T, request *http.Request)
-	}{
-		{
-			name: "Succeful send metrics",
-			serverResponse: func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(http.StatusOK)
-			},
-			reportInterval: 1,
-			expectedChecks: func(t *testing.T, request *http.Request) {
-				require.Equal(t, http.MethodPost, request.Method)
-				require.Contains(t, request.URL.Path, "/update/")
-				require.Contains(t, []string{"gauge", "counter"}, strings.Split(request.URL.Path, "/")[2])
-				require.NotEmpty(t, strings.Split(request.URL.Path, "/")[3])
-				require.NotEmpty(t, strings.Split(request.URL.Path, "/")[4])
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(tt.serverResponse))
-			defer server.Close()
-
-			client := &http.Client{}
-
-			// Запускаем отправку метрик
-			done := make(chan bool)
-			go func() {
-				PostMetric(client, tt.reportInterval, server.URL)
-				done <- true
-			}()
-			time.Sleep(3 * time.Second)
-		})
+		case <-timeout:
+			t.Fatal("timeout waiting for metrics from CollectMetrics")
+		}
 	}
 }

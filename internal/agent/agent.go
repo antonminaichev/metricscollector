@@ -3,6 +3,10 @@ package agent
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -13,6 +17,8 @@ import (
 	"time"
 
 	"github.com/antonminaichev/metricscollector/internal/retry"
+	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/mem"
 )
 
 type Metrics struct {
@@ -55,6 +61,12 @@ var metrics = []Metrics{
 	{"RandomValue", "gauge", nil, nil, nil},
 }
 
+func calculateHash(buf *bytes.Buffer, key string) string {
+	mac := hmac.New(sha256.New, []byte(key))
+	mac.Write(buf.Bytes())
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
 // checkServerAvailability is used for checking server availability
 func checkServerAvailability(host string) bool {
 	if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {
@@ -81,247 +93,96 @@ func checkServerAvailability(host string) bool {
 }
 
 // CollectMetrics is used metric collection
-func CollectMetrics(pollInterval int) {
-	log.Printf("Poll interval: %d sec", pollInterval)
+func CollectMetrics(ctx context.Context, pollInterval int, jobs chan<- Metrics) {
+	ticker := time.NewTicker(time.Duration(pollInterval) * time.Second)
+	defer ticker.Stop()
+	var rt runtime.MemStats
+	var pc int64
 
-	var runtimeMetrics runtime.MemStats
 	for {
-		runtime.ReadMemStats(&runtimeMetrics)
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			runtime.ReadMemStats(&rt)
 
-		for i := range metrics {
-			m := &metrics[i]
-			switch m.MType {
-			case "gauge":
-				if m.getValue != nil {
-					val := m.getValue(&runtimeMetrics)
-					m.Value = &val
-				} else if m.ID == "RandomValue" {
+			// send gauges
+			for _, mDef := range metrics {
+				if mDef.MType != "gauge" {
+					continue
+				}
+				if mDef.getValue != nil {
+					val := mDef.getValue(&rt)
+					jobs <- Metrics{ID: mDef.ID, MType: mDef.MType, Value: &val}
+				} else if mDef.ID == "RandomValue" {
 					val := rand.Float64()
-					m.Value = &val
-				}
-			case "counter":
-				if m.ID == "PollCount" && m.Delta != nil {
-					*m.Delta++
+					jobs <- Metrics{ID: mDef.ID, MType: mDef.MType, Value: &val}
 				}
 			}
+
+			// send counter
+			pc++
+			delta := pc
+			jobs <- Metrics{ID: "PollCount", MType: "counter", Delta: &delta}
 		}
-		time.Sleep(time.Duration(pollInterval) * time.Second)
 	}
 }
 
-// PostMetric is used for sending metrics to server
-func PostMetric(client *http.Client, reportInterval int, host string) {
-	if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {
-		host = "http://" + host
-	}
-	log.Printf("Report Interval: %d sec", reportInterval)
-	log.Printf("Host: %s", host)
-
-	for !checkServerAvailability(host) {
-		log.Printf("Server unreachable, retry in 5 seconds...")
-		time.Sleep(5 * time.Second)
-	}
-	log.Printf("Server %s is reachable", host)
-
-	reportCount := 0
-
+func CollectSystemMetrics(ctx context.Context, pollInterval int, jobs chan<- Metrics) {
+	ticker := time.NewTicker(time.Duration(pollInterval) * time.Second)
+	defer ticker.Stop()
+	cpuCount, _ := cpu.Counts(true)
 	for {
-		for _, m := range metrics {
-			var valueStr string
-			switch m.MType {
-			case "gauge":
-				if m.Value == nil {
-					continue
-				}
-				valueStr = fmt.Sprintf("%f", *m.Value)
-			case "counter":
-				if m.Delta == nil {
-					continue
-				}
-				valueStr = fmt.Sprintf("%d", *m.Delta)
-			default:
-				continue
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			// Memory metrics
+			if vm, err := mem.VirtualMemory(); err == nil {
+				tot := float64(vm.Total)
+				free := float64(vm.Free)
+				jobs <- Metrics{ID: "TotalMemory", MType: "gauge", Value: &tot}
+				jobs <- Metrics{ID: "FreeMemory", MType: "gauge", Value: &free}
 			}
 
-			url := fmt.Sprintf("%s/update/%s/%s/%s", host, m.MType, m.ID, valueStr)
-			req, err := http.NewRequest(http.MethodPost, url, nil)
-			if err != nil {
-				log.Printf("Error creating request for %s: %v", m.ID, err)
-				continue
-			}
-			req.Header.Set("Content-Type", "text/plain")
-
-			err = retry.Do(retry.DefaultRetryConfig(), func() error {
-				resp, err := client.Do(req)
-				if err != nil {
-					return err
+			// CPU utilization per core
+			if pct, err := cpu.Percent(0, true); err == nil {
+				for i := 0; i < cpuCount && i < len(pct); i++ {
+					v := pct[i]
+					jobs <- Metrics{ID: fmt.Sprintf("CPUutilization%d", i), MType: "gauge", Value: &v}
 				}
-				defer resp.Body.Close()
-				return nil
-			})
-			if err != nil {
-				log.Printf("Error sending request for %s after retries: %v", m.ID, err)
-				continue
 			}
 		}
-		reportCount++
-		log.Printf("Current report count: %d", reportCount)
-		time.Sleep(time.Duration(reportInterval) * time.Second)
 	}
 }
 
-// PostMetricJSON is used for sending metrics to server via JSON request
-func PostMetricJSON(client *http.Client, reportInterval int, host string) {
+func MetricWorker(client *http.Client, host, hashkey string, jobs <-chan Metrics, reportInterval int) {
 	if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {
 		host = "http://" + host
 	}
-	log.Printf("Report Interval: %d sec", reportInterval)
-	log.Printf("Host: %s", host)
-
-	for !checkServerAvailability(host) {
-		log.Printf("Server unreachable, retry in 5 seconds...")
-		time.Sleep(5 * time.Second)
-	}
-	log.Printf("Server %s is reachable", host)
-
-	reportCount := 0
-
-	for {
-		for _, m := range metrics {
-			url := fmt.Sprintf("%s/update", host)
-			jsonBody, err := json.Marshal(m)
-			if err != nil {
-				log.Printf("Error encoding JSON for %s: %v", m.ID, err)
-				continue
-			}
-			buf := bytes.NewBuffer(nil)
-			zb, err := gzip.NewWriterLevel(buf, gzip.BestSpeed)
-			if err != nil {
-				log.Printf("Unable to create gzip writer")
-				continue
-			}
-			_, err = zb.Write(jsonBody)
-			if err != nil {
-				log.Printf("Unable to zip data")
-				continue
-			}
-			err = zb.Close()
-			if err != nil {
-				log.Printf("Unable to close zip writer")
-				continue
-			}
-			req, err := http.NewRequest(http.MethodPost, url, buf)
-			if err != nil {
-				log.Printf("Error creating request for %s: %v", m.ID, err)
-				continue
-			}
-			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("Content-Encoding", "gzip")
-
-			err = retry.Do(retry.DefaultRetryConfig(), func() error {
-				resp, err := client.Do(req)
-				if err != nil {
-					return err
-				}
-				defer resp.Body.Close()
-				return nil
-			})
-			if err != nil {
-				log.Printf("Error sending request for %s after retries: %v", m.ID, err)
-				continue
-			}
-		}
-
-		reportCount++
-		log.Printf("Current report count: %d", reportCount)
-		time.Sleep(time.Duration(reportInterval) * time.Second)
-	}
-}
-
-// PostMetricsBatch is used for sending metrics to server via JSON request by batches
-func PostMetricsBatch(client *http.Client, reportInterval int, host string) {
-	if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {
-		host = "http://" + host
-	}
-	log.Printf("Report Interval: %d sec", reportInterval)
-	log.Printf("Host: %s", host)
-
-	for !checkServerAvailability(host) {
-		log.Printf("Server unreachable, retry in 5 seconds...")
-		time.Sleep(5 * time.Second)
-	}
-	log.Printf("Server %s is reachable", host)
-
-	reportCount := 0
-
-	for {
-		var metricsBatch []Metrics
-		for _, m := range metrics {
-			metric := Metrics{
-				ID:    m.ID,
-				MType: m.MType,
-			}
-			if m.MType == "counter" && m.Delta != nil {
-				metric.Delta = m.Delta
-			} else if m.MType == "gauge" && m.Value != nil {
-				metric.Value = m.Value
-			}
-			metricsBatch = append(metricsBatch, metric)
-		}
-
-		if len(metricsBatch) == 0 {
-			log.Printf("No metrics to send, skipping batch")
-			time.Sleep(time.Duration(reportInterval) * time.Second)
-			continue
-		}
-
-		url := fmt.Sprintf("%s/updates/", host)
-		jsonBody, err := json.Marshal(metricsBatch)
-		if err != nil {
-			log.Printf("Error encoding JSON batch: %v", err)
-			continue
-		}
-
+	for m := range jobs {
 		buf := bytes.NewBuffer(nil)
-		zb, err := gzip.NewWriterLevel(buf, gzip.BestSpeed)
-		if err != nil {
-			log.Printf("Unable to create gzip writer: %v", err)
-			continue
-		}
-		_, err = zb.Write(jsonBody)
-		if err != nil {
-			log.Printf("Unable to zip data: %v", err)
-			continue
-		}
-		err = zb.Close()
-		if err != nil {
-			log.Printf("Unable to close zip writer: %v", err)
-			continue
-		}
+		gw, _ := gzip.NewWriterLevel(buf, gzip.BestSpeed)
+		data, _ := json.Marshal(m)
+		gw.Write(data)
+		gw.Close()
 
-		req, err := http.NewRequest(http.MethodPost, url, buf)
-		if err != nil {
-			log.Printf("Error creating batch request: %v", err)
-			continue
-		}
+		// send
+		url := fmt.Sprintf("%s/update", host)
+		req, _ := http.NewRequest(http.MethodPost, url, buf)
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Content-Encoding", "gzip")
-
-		err = retry.Do(retry.DefaultRetryConfig(), func() error {
-			resp, err := client.Do(req)
-			if err != nil {
-				return err
-			}
-			defer resp.Body.Close()
-			return nil
-		})
-		if err != nil {
-			log.Printf("Error sending batch request after retries: %v", err)
-			continue
+		if hashkey != "" {
+			req.Header.Set("HashSHA256", calculateHash(buf, hashkey))
 		}
 
-		reportCount++
-		log.Printf("Current report count: %d", reportCount)
+		retry.Do(retry.DefaultRetryConfig(), func() error {
+			resp, err := client.Do(req)
+			if err == nil {
+				resp.Body.Close()
+			}
+			return err
+		})
 		time.Sleep(time.Duration(reportInterval) * time.Second)
 	}
 }
