@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -92,52 +93,64 @@ func checkServerAvailability(host string) bool {
 }
 
 // CollectMetrics is used metric collection
-func CollectMetrics(pollInterval int, jobs chan<- Metrics) {
+func CollectMetrics(ctx context.Context, pollInterval int, jobs chan<- Metrics) {
 	ticker := time.NewTicker(time.Duration(pollInterval) * time.Second)
 	defer ticker.Stop()
 	var rt runtime.MemStats
 	var pc int64
-	for range ticker.C {
-		runtime.ReadMemStats(&rt)
-		// send gauges
-		for _, mDef := range metrics {
-			if mDef.MType != "gauge" {
-				continue
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			runtime.ReadMemStats(&rt)
+
+			// send gauges
+			for _, mDef := range metrics {
+				if mDef.MType != "gauge" {
+					continue
+				}
+				if mDef.getValue != nil {
+					val := mDef.getValue(&rt)
+					jobs <- Metrics{ID: mDef.ID, MType: mDef.MType, Value: &val}
+				} else if mDef.ID == "RandomValue" {
+					val := rand.Float64()
+					jobs <- Metrics{ID: mDef.ID, MType: mDef.MType, Value: &val}
+				}
 			}
-			// collect value
-			if mDef.getValue != nil {
-				val := mDef.getValue(&rt)
-				jobs <- Metrics{ID: mDef.ID, MType: mDef.MType, Value: &val}
-			} else if mDef.ID == "RandomValue" {
-				val := rand.Float64()
-				jobs <- Metrics{ID: mDef.ID, MType: mDef.MType, Value: &val}
-			}
+
+			// send counter
+			pc++
+			delta := pc
+			jobs <- Metrics{ID: "PollCount", MType: "counter", Delta: &delta}
 		}
-		// send counter
-		pc++
-		delta := pc
-		jobs <- Metrics{ID: "PollCount", MType: "counter", Delta: &delta}
 	}
 }
 
-func CollectSystemMetrics(pollInterval int, jobs chan<- Metrics) {
+func CollectSystemMetrics(ctx context.Context, pollInterval int, jobs chan<- Metrics) {
 	ticker := time.NewTicker(time.Duration(pollInterval) * time.Second)
 	defer ticker.Stop()
 	cpuCount, _ := cpu.Counts(true)
-	for range ticker.C {
-		// Memory metrics
-		if vm, err := mem.VirtualMemory(); err == nil {
-			tot := float64(vm.Total)
-			free := float64(vm.Free)
-			jobs <- Metrics{ID: "TotalMemory", MType: "gauge", Value: &tot}
-			jobs <- Metrics{ID: "FreeMemory", MType: "gauge", Value: &free}
-		}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			// Memory metrics
+			if vm, err := mem.VirtualMemory(); err == nil {
+				tot := float64(vm.Total)
+				free := float64(vm.Free)
+				jobs <- Metrics{ID: "TotalMemory", MType: "gauge", Value: &tot}
+				jobs <- Metrics{ID: "FreeMemory", MType: "gauge", Value: &free}
+			}
 
-		// CPU utilization per core
-		if pct, err := cpu.Percent(0, true); err == nil {
-			for i := 0; i < cpuCount && i < len(pct); i++ {
-				v := pct[i]
-				jobs <- Metrics{ID: fmt.Sprintf("CPUutilization%d", i), MType: "gauge", Value: &v}
+			// CPU utilization per core
+			if pct, err := cpu.Percent(0, true); err == nil {
+				for i := 0; i < cpuCount && i < len(pct); i++ {
+					v := pct[i]
+					jobs <- Metrics{ID: fmt.Sprintf("CPUutilization%d", i), MType: "gauge", Value: &v}
+				}
 			}
 		}
 	}
