@@ -26,7 +26,6 @@ func run() error {
 	jobs := make(chan agent.Metrics, cfg.RateLimit*3)
 
 	go agent.CollectMetrics(cfg.PollInterval, jobs)
-	go agent.CollectSystemMetrics(cfg.PollInterval, jobs)
 
 	var wg sync.WaitGroup
 	for i := 0; i < cfg.RateLimit; i++ {

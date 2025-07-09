@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
 	"math/rand"
 	"net/http"
 	"runtime"
@@ -66,32 +65,6 @@ func calculateHash(buf *bytes.Buffer, key string) string {
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-// checkServerAvailability is used for checking server availability
-func checkServerAvailability(host string) bool {
-	if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {
-		host = "http://" + host
-	}
-
-	err := retry.Do(retry.DefaultRetryConfig(), func() error {
-		resp, err := http.Get(host + "/health")
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("server returned status code %d", resp.StatusCode)
-		}
-		return nil
-	})
-
-	if err != nil {
-		log.Printf("Server availability check failed: %v", err)
-		return false
-	}
-	return true
-}
-
-// CollectMetrics is used metric collection
 func CollectMetrics(pollInterval int, jobs chan<- Metrics) {
 	ticker := time.NewTicker(time.Duration(pollInterval) * time.Second)
 	defer ticker.Stop()
@@ -99,21 +72,19 @@ func CollectMetrics(pollInterval int, jobs chan<- Metrics) {
 	var pc int64
 	for range ticker.C {
 		runtime.ReadMemStats(&rt)
-		// send gauges
 		for _, mDef := range metrics {
 			if mDef.MType != "gauge" {
 				continue
 			}
-			// collect value
 			if mDef.getValue != nil {
 				val := mDef.getValue(&rt)
-				jobs <- Metrics{ID: mDef.ID, MType: mDef.MType, Value: &val}
+				v := val
+				jobs <- Metrics{ID: mDef.ID, MType: mDef.MType, Value: &v}
 			} else if mDef.ID == "RandomValue" {
-				val := rand.Float64()
-				jobs <- Metrics{ID: mDef.ID, MType: mDef.MType, Value: &val}
+				v := rand.Float64()
+				jobs <- Metrics{ID: mDef.ID, MType: mDef.MType, Value: &v}
 			}
 		}
-		// send counter
 		pc++
 		delta := pc
 		jobs <- Metrics{ID: "PollCount", MType: "counter", Delta: &delta}
@@ -125,15 +96,12 @@ func CollectSystemMetrics(pollInterval int, jobs chan<- Metrics) {
 	defer ticker.Stop()
 	cpuCount, _ := cpu.Counts(true)
 	for range ticker.C {
-		// Memory metrics
 		if vm, err := mem.VirtualMemory(); err == nil {
 			tot := float64(vm.Total)
 			free := float64(vm.Free)
 			jobs <- Metrics{ID: "TotalMemory", MType: "gauge", Value: &tot}
 			jobs <- Metrics{ID: "FreeMemory", MType: "gauge", Value: &free}
 		}
-
-		// CPU utilization per core
 		if pct, err := cpu.Percent(0, true); err == nil {
 			for i := 0; i < cpuCount && i < len(pct); i++ {
 				v := pct[i]
@@ -154,7 +122,6 @@ func MetricWorker(client *http.Client, host, hashkey string, jobs <-chan Metrics
 		gw.Write(data)
 		gw.Close()
 
-		// send
 		url := fmt.Sprintf("%s/update", host)
 		req, _ := http.NewRequest(http.MethodPost, url, buf)
 		req.Header.Set("Content-Type", "application/json")

@@ -1,14 +1,22 @@
 package router
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 
+	"github.com/antonminaichev/metricscollector/internal/logger"
+	"github.com/antonminaichev/metricscollector/internal/server/middleware"
 	st "github.com/antonminaichev/metricscollector/internal/server/storage"
+	fs "github.com/antonminaichev/metricscollector/internal/server/storage/file"
 	ms "github.com/antonminaichev/metricscollector/internal/server/storage/memstorage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -196,4 +204,50 @@ func TestPrintAllMetrics(t *testing.T) {
 	assert.Contains(t, body, "52")
 	assert.Contains(t, body, "testGauge")
 	assert.Contains(t, body, "5432.21234")
+}
+
+func BenchmarkServer_FileStorageUpdate(b *testing.B) {
+	// создаем временный файл для хранения метрик
+	tmpFile := filepath.Join(os.TempDir(), "metrics_benchmark.json")
+	_ = os.Remove(tmpFile)
+
+	_ = logger.Initialize("ERROR")
+	store, err := fs.NewFileStorage(tmpFile, logger.Log)
+	if err != nil {
+		b.Fatalf("failed to create file storage: %v", err)
+	}
+
+	handler := middleware.GzipHandler(NewRouter(store))
+
+	metric := st.Metric{
+		ID:    "BenchmarkGauge",
+		MType: st.Gauge,
+		Value: newFloat64(999.999),
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		body, _ := json.Marshal(metric)
+
+		var compressed bytes.Buffer
+		gzw := gzip.NewWriter(&compressed)
+		gzw.Write(body)
+		gzw.Close()
+
+		req := httptest.NewRequest(http.MethodPost, "/update", bytes.NewReader(compressed.Bytes()))
+		req.Header.Set("Content-Encoding", "gzip")
+		req.Header.Set("Content-Type", "application/json")
+
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			b.Fatalf("unexpected status: %d", rec.Code)
+		}
+	}
+	_ = os.Remove(tmpFile)
+}
+
+func newFloat64(v float64) *float64 {
+	return &v
 }

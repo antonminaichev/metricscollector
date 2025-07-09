@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"runtime"
 	"testing"
 	"time"
 
@@ -55,5 +56,35 @@ func TestCollectMetrics(t *testing.T) {
 		case <-timeout:
 			t.Fatal("timeout waiting for metrics from CollectMetrics")
 		}
+	}
+}
+
+func BenchmarkCollectMetricsLoop(b *testing.B) {
+	jobs := make(chan Metrics, 1000)
+	defer close(jobs)
+
+	go func() {
+		for range jobs {
+			// эмуляция отправки
+		}
+	}()
+	//Функция CollectMetrics, но без ticker-а
+	var rt runtime.MemStats
+	for i := 0; i < b.N; i++ {
+		runtime.ReadMemStats(&rt)
+		for _, mDef := range metrics {
+			if mDef.MType != "gauge" && mDef.ID != "RandomValue" {
+				continue
+			}
+			if mDef.getValue != nil {
+				val := mDef.getValue(&rt)
+				jobs <- Metrics{ID: mDef.ID, MType: mDef.MType, Value: &val}
+			} else if mDef.ID == "RandomValue" {
+				val := float64(i)
+				jobs <- Metrics{ID: mDef.ID, MType: mDef.MType, Value: &val}
+			}
+		}
+		delta := int64(i + 1)
+		jobs <- Metrics{ID: "PollCount", MType: "counter", Delta: &delta}
 	}
 }

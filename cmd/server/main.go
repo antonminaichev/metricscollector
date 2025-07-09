@@ -32,7 +32,6 @@ func run() error {
 	}
 
 	var s storage.Storage
-
 	// Database env or flag is not empty
 	if cfg.DatabaseConnection != "" {
 		logger.Log.Info("Connecting to DB", zap.String("DSN", cfg.DatabaseConnection))
