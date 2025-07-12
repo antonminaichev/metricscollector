@@ -36,7 +36,7 @@ func ExamplePostMetricJSON() {
 	_ = json.NewDecoder(w.Body).Decode(&response)
 
 	fmt.Printf("Status: %d, ID: %s, Type: %s, Delta: %d\n",
-		w.Result().StatusCode, response.ID, response.MType, *response.Delta)
+		resp.StatusCode, response.ID, response.MType, *response.Delta)
 
 	// Output: Status: 200, ID: myCounter, Type: counter, Delta: 42
 }
@@ -62,7 +62,7 @@ func ExampleGetMetricJSON() {
 	_ = json.NewDecoder(w.Body).Decode(&response)
 
 	fmt.Printf("Status: %d, ID: %s, Type: %s, Value: %.2f\n",
-		w.Result().StatusCode, response.ID, response.MType, *response.Value)
+		resp.StatusCode, response.ID, response.MType, *response.Value)
 
 	// Output: Status: 200, ID: myGauge, Type: gauge, Value: 3.14
 }
@@ -87,7 +87,7 @@ func ExamplePostMetric() {
 	_ = json.NewDecoder(w.Body).Decode(&response)
 
 	fmt.Printf("Status: %d, ID: %s, Type: %s, Delta: %d\n",
-		w.Result().StatusCode, response.ID, response.MType, *response.Delta)
+		resp.StatusCode, response.ID, response.MType, *response.Delta)
 
 	// Output: Status: 200, ID: myCounter, Type: counter, Delta: 42
 }
@@ -113,7 +113,7 @@ func ExampleGetMetric() {
 	_ = json.NewDecoder(w.Body).Decode(&response)
 
 	fmt.Printf("Status: %d, ID: %s, Type: %s, Value: %.2f\n",
-		w.Result().StatusCode, response.ID, response.MType, *response.Value)
+		resp.StatusCode, response.ID, response.MType, *response.Value)
 
 	// Output: Status: 200, ID: myGauge, Type: gauge, Value: 3.14
 }
@@ -137,7 +137,7 @@ func ExamplePostMetricsJSON() {
 	_ = json.NewDecoder(w.Body).Decode(&response)
 
 	fmt.Printf("Status: %d, count: %d, first: %s, second: %s\n",
-		w.Result().StatusCode,
+		resp.StatusCode,
 		len(response),
 		response[0].ID,
 		response[1].ID)
@@ -174,7 +174,7 @@ func ExampleHealthCheck() {
 	resp := w.Result()
 	defer resp.Body.Close()
 
-	fmt.Printf("Status: %d, Body: %s\n", w.Result().StatusCode, w.Body.String())
+	fmt.Printf("Status: %d, Body: %s\n", resp.StatusCode, w.Body.String())
 
 	// Output: Status: 200, Body: {"status": "ok"}
 }
