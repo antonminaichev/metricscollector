@@ -29,6 +29,8 @@ func ExamplePostMetricJSON() {
 	req := httptest.NewRequest(http.MethodPost, "/update/", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 	PostMetricJSON(w, req, s)
+	resp := w.Result()
+	defer resp.Body.Close()
 
 	var response storage.Metric
 	_ = json.NewDecoder(w.Body).Decode(&response)
@@ -53,6 +55,8 @@ func ExampleGetMetricJSON() {
 	req := httptest.NewRequest(http.MethodPost, "/value/", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 	GetMetricJSON(w, req, s)
+	resp := w.Result()
+	defer resp.Body.Close()
 
 	var response storage.Metric
 	_ = json.NewDecoder(w.Body).Decode(&response)
@@ -76,6 +80,8 @@ func ExamplePostMetric() {
 	req := httptest.NewRequest(http.MethodPost, "/update/", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 	PostMetricJSON(w, req, s)
+	resp := w.Result()
+	defer resp.Body.Close()
 
 	var response storage.Metric
 	_ = json.NewDecoder(w.Body).Decode(&response)
@@ -100,6 +106,8 @@ func ExampleGetMetric() {
 	req := httptest.NewRequest(http.MethodPost, "/value/", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 	GetMetricJSON(w, req, s)
+	resp := w.Result()
+	defer resp.Body.Close()
 
 	var response storage.Metric
 	_ = json.NewDecoder(w.Body).Decode(&response)
@@ -122,6 +130,8 @@ func ExamplePostMetricsJSON() {
 	req := httptest.NewRequest(http.MethodPost, "/updates/", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 	PostMetricsJSON(w, req, s)
+	resp := w.Result()
+	defer resp.Body.Close()
 
 	var response []storage.Metric
 	_ = json.NewDecoder(w.Body).Decode(&response)
@@ -144,6 +154,8 @@ func ExamplePrintAllMetrics() {
 	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 	w := httptest.NewRecorder()
 	PrintAllMetrics(w, req, s)
+	resp := w.Result()
+	defer resp.Body.Close()
 
 	body := w.Body.String()
 	fmt.Println("Contains disk_free:", strings.Contains(body, "disk_free"))
@@ -159,6 +171,8 @@ func ExampleHealthCheck() {
 	w := httptest.NewRecorder()
 
 	HealthCheck(w, req)
+	resp := w.Result()
+	defer resp.Body.Close()
 
 	fmt.Printf("Status: %d, Body: %s\n", w.Result().StatusCode, w.Body.String())
 
