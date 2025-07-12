@@ -21,7 +21,6 @@ func main() {
 	}
 }
 
-// Run defines storage for metrics and launch http server
 func run() error {
 	cfg, err := NewConfig()
 	if err != nil {
@@ -32,7 +31,6 @@ func run() error {
 	}
 
 	var s storage.Storage
-	// Database env or flag is not empty
 	if cfg.DatabaseConnection != "" {
 		logger.Log.Info("Connecting to DB", zap.String("DSN", cfg.DatabaseConnection))
 		pgStorage, err := pg.NewPostgresStorage(cfg.DatabaseConnection)
@@ -76,7 +74,6 @@ func run() error {
 			}
 		}()
 
-		// Периодически сохраняем метрики
 		for {
 			if err := fileStorage.SaveMetrics(); err != nil {
 				logger.Log.Error("Failed to save metrics to file", zap.Error(err))

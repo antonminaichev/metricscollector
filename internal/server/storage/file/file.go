@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// FileStorage реализует интерфейс Storage для хранения метрик в файле
+// FileStorage realises intreface for metric storage in a file.
 type FileStorage struct {
 	filePath string
 	metrics  struct {
@@ -22,7 +22,7 @@ type FileStorage struct {
 	logger *zap.Logger
 }
 
-// NewFileStorage создает новый экземпляр FileStorage
+// NewFileStorage creates a new instance of FileStorage.
 func NewFileStorage(filePath string, logger *zap.Logger) (*FileStorage, error) {
 	fs := &FileStorage{
 		filePath: filePath,
@@ -44,7 +44,7 @@ func NewFileStorage(filePath string, logger *zap.Logger) (*FileStorage, error) {
 	return fs, nil
 }
 
-// UpdateMetric обновляет или создает метрику
+// UpdateMetric updates or creates metric if it doesnt exist.
 func (fs *FileStorage) UpdateMetric(ctx context.Context, id string, mType storage.MetricType, delta *int64, value *float64) error {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
@@ -74,7 +74,7 @@ func (fs *FileStorage) UpdateMetric(ctx context.Context, id string, mType storag
 	return nil
 }
 
-// GetMetric возвращает значение метрики
+// GetMetric returns metric value from a storage.
 func (fs *FileStorage) GetMetric(ctx context.Context, id string, mType storage.MetricType) (*int64, *float64, error) {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
@@ -101,7 +101,7 @@ func (fs *FileStorage) GetMetric(ctx context.Context, id string, mType storage.M
 	return nil, nil, fmt.Errorf("metric not found")
 }
 
-// GetAllMetrics возвращает все метрики
+// GetAllMetrics returns all metrics from a storage.
 func (fs *FileStorage) GetAllMetrics(ctx context.Context) (map[string]int64, map[string]float64, error) {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
@@ -125,7 +125,7 @@ func (fs *FileStorage) GetAllMetrics(ctx context.Context) (map[string]int64, map
 	return counters, gauges, nil
 }
 
-// Ping проверяет доступность хранилища
+// Ping checks database availability.
 func (fs *FileStorage) Ping(ctx context.Context) error {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
@@ -140,7 +140,7 @@ func (fs *FileStorage) Ping(ctx context.Context) error {
 	return err
 }
 
-// loadFromFile загружает метрики из файла
+// LoadMetrics loads metrics from a file to RAM.
 func (fs *FileStorage) LoadMetrics() error {
 	data, err := os.ReadFile(fs.filePath)
 	if err != nil {
@@ -153,7 +153,7 @@ func (fs *FileStorage) LoadMetrics() error {
 	return json.Unmarshal(data, &fs.metrics)
 }
 
-// saveToFile сохраняет метрики в файл
+// SaveMetrics saves metrics to a file.
 func (fs *FileStorage) SaveMetrics() error {
 	data, err := json.MarshalIndent(fs.metrics, "", "  ")
 	if err != nil {

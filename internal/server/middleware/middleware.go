@@ -1,3 +1,4 @@
+// Middleware packacge is used for middleware functions.
 package middleware
 
 import (
@@ -21,6 +22,7 @@ func (w gzipResponseWriter) Write(b []byte) (int, error) {
 	return w.Writer.Write(b)
 }
 
+// GzipHandler is a middleware to gzip request payload.
 func GzipHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Content-Encoding") == "gzip" {
@@ -46,8 +48,8 @@ func GzipHandler(next http.Handler) http.Handler {
 	})
 }
 
-// HashHandler проверяет HMAC-SHA256 входящих запросов и подписывает ответы.
-// Если ключ пустой, пропускает запрос без проверки.
+// HashHandler checks HMAC-SHA256 of incoming requests and signs answers.
+// If keys is empty, checking is skipped.
 func HashHandler(next http.Handler, key string) http.Handler {
 	if key == "" {
 		return next

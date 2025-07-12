@@ -10,12 +10,12 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-// PostgresStorage реализует интерфейс Storage для PostgreSQL
+// PostgresStorage realieses storage interface for postgresDB.
 type PostgresStorage struct {
 	db *sql.DB
 }
 
-// NewPostgresStorage создает новое хранилище PostgreSQL
+// NewPostgresStorage creates new PostgreSQL storage.
 func NewPostgresStorage(connStr string) (*PostgresStorage, error) {
 	db, err := sql.Open("pgx", connStr)
 	if err != nil {
@@ -51,6 +51,7 @@ func (s *PostgresStorage) initTable() error {
 	})
 }
 
+// UpdateMetric creates or updates metric in a DB storage.
 func (s *PostgresStorage) UpdateMetric(ctx context.Context, id string, mType storage.MetricType, delta *int64, value *float64) error {
 	query := `
 		INSERT INTO metrics (id, type, delta, value)
@@ -64,6 +65,7 @@ func (s *PostgresStorage) UpdateMetric(ctx context.Context, id string, mType sto
 	})
 }
 
+// GetMetric returns a metric from a DB storage.
 func (s *PostgresStorage) GetMetric(ctx context.Context, id string, mType storage.MetricType) (*int64, *float64, error) {
 	var delta sql.NullInt64
 	var value sql.NullFloat64
@@ -94,6 +96,7 @@ func (s *PostgresStorage) GetMetric(ctx context.Context, id string, mType storag
 	return deltaPtr, valuePtr, nil
 }
 
+// GetAllMetrics returns all existing metrics from a DB storage.
 func (s *PostgresStorage) GetAllMetrics(ctx context.Context) (map[string]int64, map[string]float64, error) {
 	counters := make(map[string]int64)
 	gauges := make(map[string]float64)
@@ -130,6 +133,7 @@ func (s *PostgresStorage) GetAllMetrics(ctx context.Context) (map[string]int64, 
 	return counters, gauges, nil
 }
 
+// Ping pings a DB for a availability.
 func (s *PostgresStorage) Ping(ctx context.Context) error {
 	return retry.Do(retry.DefaultRetryConfig(), func() error {
 		return s.db.PingContext(ctx)

@@ -9,7 +9,7 @@ import (
 	"github.com/go-chi/chi"
 )
 
-// PostMetric обновляет значение метрики
+// PostMetric updates single metric value via plaintext request.
 func PostMetric(rw http.ResponseWriter, r *http.Request, s storage.Storage) {
 	if r.Method != http.MethodPost {
 		rw.WriteHeader(http.StatusMethodNotAllowed)
@@ -54,7 +54,7 @@ func PostMetric(rw http.ResponseWriter, r *http.Request, s storage.Storage) {
 	rw.WriteHeader(http.StatusOK)
 }
 
-// GetMetric возвращает значение метрики
+// GetMetric returns a metric values via plaintext request.
 func GetMetric(rw http.ResponseWriter, r *http.Request, s storage.Storage) {
 	metricType := chi.URLParam(r, "type")
 	metricName := chi.URLParam(r, "metric")

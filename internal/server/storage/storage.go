@@ -1,16 +1,18 @@
+// Storage package is used for creating and operating different metric storage types.
 package storage
 
 import "context"
 
-// MetricType определяет тип метрики
+// MetricType defines metric type.
 type MetricType string
 
+// Two main metric types.
 const (
 	Counter MetricType = "counter"
 	Gauge   MetricType = "gauge"
 )
 
-// Metric представляет собой метрику с её значением
+// Metric presents single metric type and its value.
 type Metric struct {
 	ID    string     `json:"id"`              // имя метрики
 	MType MetricType `json:"type"`            // параметр, принимающий значение gauge или counter
@@ -18,17 +20,17 @@ type Metric struct {
 	Value *float64   `json:"value,omitempty"`
 }
 
-// Storage определяет интерфейс для хранения метрик
+// Storage defines an interface for metric operations.
 type Storage interface {
-	// UpdateMetric обновляет или создает метрику
+	// UpdateMetric updates or creates metric in a storage.
 	UpdateMetric(ctx context.Context, id string, mType MetricType, delta *int64, value *float64) error
 
-	// GetMetric возвращает значение метрики
+	// GetMetric returns metric values from a storage.
 	GetMetric(ctx context.Context, id string, mType MetricType) (*int64, *float64, error)
 
-	// GetAllMetrics возвращает все метрики
+	// GetAllMetrics returns all metrics from a storage.
 	GetAllMetrics(ctx context.Context) (map[string]int64, map[string]float64, error)
 
-	// Ping проверяет доступность хранилища
+	// Ping checks database availability.
 	Ping(ctx context.Context) error
 }
