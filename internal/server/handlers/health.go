@@ -22,7 +22,7 @@ func HealthCheck(rw http.ResponseWriter, r *http.Request) {
 }
 
 // PrintAllMetrics prints all metrics.
-func PrintAllMetrics(rw http.ResponseWriter, r *http.Request, s storage.Storage) {
+func PrintAllMetrics(rw http.ResponseWriter, r *http.Request, s storage.MetricReader) {
 	counters, gauges, err := s.GetAllMetrics(r.Context())
 	if err != nil {
 		http.Error(rw, "Failed to get metrics", http.StatusInternalServerError)

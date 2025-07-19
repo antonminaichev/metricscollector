@@ -76,7 +76,7 @@ func PostMetricJSON(rw http.ResponseWriter, r *http.Request, s storage.Storage) 
 }
 
 // GetMetricJSON returns a metric value via JSON request.
-func GetMetricJSON(rw http.ResponseWriter, r *http.Request, s storage.Storage) {
+func GetMetricJSON(rw http.ResponseWriter, r *http.Request, s storage.MetricReader) {
 	if r.Method != http.MethodPost {
 		rw.WriteHeader(http.StatusMethodNotAllowed)
 		return

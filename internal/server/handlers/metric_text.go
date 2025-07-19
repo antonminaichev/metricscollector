@@ -10,7 +10,7 @@ import (
 )
 
 // PostMetric updates single metric value via plaintext request.
-func PostMetric(rw http.ResponseWriter, r *http.Request, s storage.Storage) {
+func PostMetric(rw http.ResponseWriter, r *http.Request, s storage.MetricWriter) {
 	if r.Method != http.MethodPost {
 		rw.WriteHeader(http.StatusMethodNotAllowed)
 		return
@@ -55,7 +55,7 @@ func PostMetric(rw http.ResponseWriter, r *http.Request, s storage.Storage) {
 }
 
 // GetMetric returns a metric values via plaintext request.
-func GetMetric(rw http.ResponseWriter, r *http.Request, s storage.Storage) {
+func GetMetric(rw http.ResponseWriter, r *http.Request, s storage.MetricReader) {
 	metricType := chi.URLParam(r, "type")
 	metricName := chi.URLParam(r, "metric")
 

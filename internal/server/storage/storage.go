@@ -20,17 +20,23 @@ type Metric struct {
 	Value *float64   `json:"value,omitempty"`
 }
 
-// Storage defines an interface for metric operations.
-type Storage interface {
-	// UpdateMetric updates or creates metric in a storage.
-	UpdateMetric(ctx context.Context, id string, mType MetricType, delta *int64, value *float64) error
-
+type MetricReader interface {
 	// GetMetric returns metric values from a storage.
 	GetMetric(ctx context.Context, id string, mType MetricType) (*int64, *float64, error)
 
 	// GetAllMetrics returns all metrics from a storage.
 	GetAllMetrics(ctx context.Context) (map[string]int64, map[string]float64, error)
+}
 
+type MetricWriter interface {
+	// UpdateMetric updates or creates metric in a storage.
+	UpdateMetric(ctx context.Context, id string, mType MetricType, delta *int64, value *float64) error
+}
+
+// Storage defines an interface for metric operations.
+type Storage interface {
+	MetricReader
+	MetricWriter
 	// Ping checks database availability.
 	Ping(ctx context.Context) error
 }
