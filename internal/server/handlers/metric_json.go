@@ -1,3 +1,4 @@
+// Handlers package contains different http server handlers.
 package handlers
 
 import (
@@ -7,7 +8,7 @@ import (
 	"github.com/antonminaichev/metricscollector/internal/server/storage"
 )
 
-// PostMetricJSON обновляет значение метрики через JSON-запрос
+// PostMetricJSON updates single metric value via JSON request.
 func PostMetricJSON(rw http.ResponseWriter, r *http.Request, s storage.Storage) {
 	if r.Method != http.MethodPost {
 		rw.WriteHeader(http.StatusMethodNotAllowed)
@@ -74,8 +75,8 @@ func PostMetricJSON(rw http.ResponseWriter, r *http.Request, s storage.Storage) 
 	}
 }
 
-// GetMetricJSON возвращает значение метрики через JSON-запрос
-func GetMetricJSON(rw http.ResponseWriter, r *http.Request, s storage.Storage) {
+// GetMetricJSON returns a metric value via JSON request.
+func GetMetricJSON(rw http.ResponseWriter, r *http.Request, s storage.MetricReader) {
 	if r.Method != http.MethodPost {
 		rw.WriteHeader(http.StatusMethodNotAllowed)
 		return
@@ -116,7 +117,7 @@ func GetMetricJSON(rw http.ResponseWriter, r *http.Request, s storage.Storage) {
 	}
 }
 
-// PostMetricsJSON обновляет несколько метрик через JSON-запрос
+// PostMetricsJSON updates a banch of metric values via JSON request.
 func PostMetricsJSON(rw http.ResponseWriter, r *http.Request, s storage.Storage) {
 	if r.Method != http.MethodPost {
 		rw.WriteHeader(http.StatusMethodNotAllowed)

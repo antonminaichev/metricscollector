@@ -9,7 +9,7 @@ import (
 	"github.com/antonminaichev/metricscollector/internal/server/storage"
 )
 
-// HealthCheck используется для проверки доступности сервера
+// HealthCheck checks server availability.
 func HealthCheck(rw http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
@@ -21,8 +21,8 @@ func HealthCheck(rw http.ResponseWriter, r *http.Request) {
 	rw.Write([]byte(`{"status": "ok"}`))
 }
 
-// PrintAllMetrics выводит все метрики
-func PrintAllMetrics(rw http.ResponseWriter, r *http.Request, s storage.Storage) {
+// PrintAllMetrics prints all metrics.
+func PrintAllMetrics(rw http.ResponseWriter, r *http.Request, s storage.MetricReader) {
 	counters, gauges, err := s.GetAllMetrics(r.Context())
 	if err != nil {
 		http.Error(rw, "Failed to get metrics", http.StatusInternalServerError)
@@ -52,6 +52,7 @@ func PrintAllMetrics(rw http.ResponseWriter, r *http.Request, s storage.Storage)
 	io.WriteString(rw, "</body></html>")
 }
 
+// PingDatabase checks database availability.
 func PingDatabase(w http.ResponseWriter, r *http.Request, s storage.Storage) {
 	err := retry.Do(retry.DefaultRetryConfig(), func() error {
 		return s.Ping(r.Context())

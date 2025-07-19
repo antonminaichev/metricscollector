@@ -8,14 +8,14 @@ import (
 	"github.com/antonminaichev/metricscollector/internal/server/storage"
 )
 
-// MemoryStorage реализует интерфейс Storage для хранения в памяти
+// MemoryStorage realises Storage interface for RAM storage.
 type MemoryStorage struct {
 	mu       sync.RWMutex
 	counters map[string]int64
 	gauges   map[string]float64
 }
 
-// NewMemoryStorage создает новое in-memory хранилище
+// NewMemoryStorage creates new in-memory storage.
 func NewMemoryStorage() *MemoryStorage {
 	return &MemoryStorage{
 		counters: make(map[string]int64),
@@ -23,6 +23,7 @@ func NewMemoryStorage() *MemoryStorage {
 	}
 }
 
+// UpdateMetric updates or creates a metric in a in-memory storage.
 func (s *MemoryStorage) UpdateMetric(ctx context.Context, id string, mType storage.MetricType, delta *int64, value *float64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -51,6 +52,7 @@ func (s *MemoryStorage) UpdateMetric(ctx context.Context, id string, mType stora
 	return nil
 }
 
+// GetMetric returns a single metric from in-memory storage.
 func (s *MemoryStorage) GetMetric(ctx context.Context, id string, mType storage.MetricType) (*int64, *float64, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -77,6 +79,7 @@ func (s *MemoryStorage) GetMetric(ctx context.Context, id string, mType storage.
 	return nil, nil, fmt.Errorf("metric not found")
 }
 
+// GetAllMetrics returns all metrics from a in-memory storage.
 func (s *MemoryStorage) GetAllMetrics(ctx context.Context) (map[string]int64, map[string]float64, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

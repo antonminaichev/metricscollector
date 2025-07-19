@@ -1,3 +1,4 @@
+// Logger package is used for logging.
 package logger
 
 import (
@@ -32,7 +33,7 @@ func (r *loggingResponseWriter) WriteHeader(statusCode int) {
 	r.responseData.status = statusCode
 }
 
-// Initialize инициализирует синглтон логера с необходимым уровнем логирования.
+// Initialize initialises logger singletone with a selected logging level.
 func Initialize(level string) error {
 	// преобразуем текстовый уровень логирования в zap.AtomicLevel
 	lvl, err := zap.ParseAtomicLevel(level)
@@ -53,7 +54,7 @@ func Initialize(level string) error {
 	return nil
 }
 
-// Middleware функция для логирования
+// WithLogging is a middleware function for logging.
 func WithLogging(h http.Handler) http.Handler {
 	logFn := func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()

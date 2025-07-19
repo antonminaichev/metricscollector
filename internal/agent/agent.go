@@ -1,3 +1,4 @@
+// Package agent is used to collect system metrics and push the to the server.
 package agent
 
 import (
@@ -21,6 +22,7 @@ import (
 	"github.com/shirou/gopsutil/mem"
 )
 
+// Metrics stores single metric value and type.
 type Metrics struct {
 	ID       string   `json:"id"`              // имя метрики
 	MType    string   `json:"type"`            // параметр, принимающий значение gauge или counter
@@ -92,7 +94,7 @@ func checkServerAvailability(host string) bool {
 	return true
 }
 
-// CollectMetrics is used metric collection
+// CollectMetrics collects metrics.
 func CollectMetrics(ctx context.Context, pollInterval int, jobs chan<- Metrics) {
 	ticker := time.NewTicker(time.Duration(pollInterval) * time.Second)
 	defer ticker.Stop()
@@ -128,6 +130,7 @@ func CollectMetrics(ctx context.Context, pollInterval int, jobs chan<- Metrics) 
 	}
 }
 
+// CollectSystemMetrics collects system metrics.
 func CollectSystemMetrics(ctx context.Context, pollInterval int, jobs chan<- Metrics) {
 	ticker := time.NewTicker(time.Duration(pollInterval) * time.Second)
 	defer ticker.Stop()
@@ -156,6 +159,7 @@ func CollectSystemMetrics(ctx context.Context, pollInterval int, jobs chan<- Met
 	}
 }
 
+// MetricWorker initialises worker for metric collection.
 func MetricWorker(client *http.Client, host, hashkey string, jobs <-chan Metrics, reportInterval int) {
 	if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {
 		host = "http://" + host
@@ -167,7 +171,6 @@ func MetricWorker(client *http.Client, host, hashkey string, jobs <-chan Metrics
 		gw.Write(data)
 		gw.Close()
 
-		// send
 		url := fmt.Sprintf("%s/update", host)
 		req, _ := http.NewRequest(http.MethodPost, url, buf)
 		req.Header.Set("Content-Type", "application/json")

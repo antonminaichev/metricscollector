@@ -1,3 +1,4 @@
+// Router package is used for creating http server handlers layout.
 package router
 
 import (
@@ -8,6 +9,7 @@ import (
 	"github.com/go-chi/chi"
 )
 
+// NewRouter creates a router with a handlers layout.
 func NewRouter(s storage.Storage) chi.Router {
 	r := chi.NewRouter()
 	r.Route("/", func(r chi.Router) {
