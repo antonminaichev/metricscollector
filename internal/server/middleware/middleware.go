@@ -31,14 +31,22 @@ func GzipHandler(next http.Handler) http.Handler {
 				http.Error(rw, "Failed to create gzip reader", http.StatusBadRequest)
 				return
 			}
-			defer gzr.Close()
+			defer func() {
+				if err := gzr.Close(); err != nil {
+					http.Error(rw, "Failed to close gzip writer", http.StatusInternalServerError)
+				}
+			}()
 			r.Body = io.NopCloser(gzr)
 		}
 
 		if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 			rw.Header().Set("Content-Encoding", "gzip")
 			gzw := gzip.NewWriter(rw)
-			defer gzw.Close()
+			defer func() {
+				if err := gzw.Close(); err != nil {
+					http.Error(rw, "Failed to close gzip writer", http.StatusInternalServerError)
+				}
+			}()
 
 			gzrw := gzipResponseWriter{Writer: gzw, ResponseWriter: rw}
 			next.ServeHTTP(gzrw, r)
@@ -100,7 +108,9 @@ func HashHandler(next http.Handler, key string) http.Handler {
 		}
 		w.Header().Set("HashSHA256", hex.EncodeToString(mac.Sum(nil)))
 		w.WriteHeader(hw.statusCode)
-		w.Write(buf.Bytes())
+		if _, err := w.Write(buf.Bytes()); err != nil {
+			log.Printf("failed to write response body: %v", err)
+		}
 	})
 }
 

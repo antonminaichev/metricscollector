@@ -19,7 +19,8 @@ func run() error {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err := logger.Initialize(cfg.LogLevel); err != nil {
+
+	if err = logger.Initialize(cfg.LogLevel); err != nil {
 		return err
 	}
 
