@@ -107,7 +107,12 @@ func (s *PostgresStorage) GetAllMetrics(ctx context.Context) (map[string]int64, 
 	if err != nil {
 		return nil, nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if cerr := rows.Close(); cerr != nil {
+			// Можно логировать или обернуть
+			err = cerr
+		}
+	}()
 
 	for rows.Next() {
 		var id string
