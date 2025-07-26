@@ -1,13 +1,22 @@
 @echo off
 echo Starting server and agent...
 
+:: Параметры сборки
+for /f "tokens=1-3 delims=." %%a in ("%date%") do (
+    set DD=%%a
+    set MM=%%b
+    set YYYY=%%c
+)
+set DATE=%YYYY%-%MM%-%DD%
+for /f "delims=" %%i in ('git rev-parse HEAD') do set COMMIT=%%i
+
 :: Собираем сервер
 echo Building server...
-go build -o .\cmd\server\server.exe .\cmd\server\
+go build -ldflags "-X main.buildVersion=%VERSION% -X main.buildDate=%DATE% -X main.buildCommit=%COMMIT%" -o .\cmd\server\server.exe .\cmd\server\
 
 :: Собираем агента
 echo Building agent...
-go build -o .\cmd\agent\agent.exe .\cmd\agent\
+go build -ldflags "-X main.buildVersion=%VERSION% -X main.buildDate=%DATE% -X main.buildCommit=%COMMIT%" -o .\cmd\agent\agent.exe .\cmd\agent\
 
 :: Запускаем сервер в отдельном окне
 set DATABASE_DSN=postgres://postgres:pass@localhost:5432?sslmode=disable

@@ -18,7 +18,9 @@ func HealthCheck(rw http.ResponseWriter, r *http.Request) {
 
 	rw.Header().Set("Content-Type", "application/json")
 	rw.WriteHeader(http.StatusOK)
-	rw.Write([]byte(`{"status": "ok"}`))
+	if _, err := rw.Write([]byte(`{"status": "ok"}`)); err != nil {
+		http.Error(rw, "Failed to write response", http.StatusInternalServerError)
+	}
 }
 
 // PrintAllMetrics prints all metrics.
@@ -64,5 +66,7 @@ func PingDatabase(w http.ResponseWriter, r *http.Request, s storage.Storage) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status": "ok"}`))
+	if _, err := w.Write([]byte(`{"status": "ok"}`)); err != nil {
+		http.Error(w, "Failed to write response", http.StatusInternalServerError)
+	}
 }

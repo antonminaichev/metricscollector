@@ -80,7 +80,11 @@ func checkServerAvailability(host string) bool {
 		if err != nil {
 			return err
 		}
-		defer resp.Body.Close()
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				log.Printf("failed to close response body: %v", err)
+			}
+		}()
 		if resp.StatusCode != http.StatusOK {
 			return fmt.Errorf("server returned status code %d", resp.StatusCode)
 		}
@@ -168,8 +172,14 @@ func MetricWorker(client *http.Client, host, hashkey string, jobs <-chan Metrics
 		buf := bytes.NewBuffer(nil)
 		gw, _ := gzip.NewWriterLevel(buf, gzip.BestSpeed)
 		data, _ := json.Marshal(m)
-		gw.Write(data)
-		gw.Close()
+		if _, err := gw.Write(data); err != nil {
+			log.Printf("failed to write gzip data: %v", err)
+			continue
+		}
+		if err := gw.Close(); err != nil {
+			log.Printf("failed to close gzip writer: %v", err)
+			continue
+		}
 
 		url := fmt.Sprintf("%s/update", host)
 		req, _ := http.NewRequest(http.MethodPost, url, buf)
@@ -179,13 +189,21 @@ func MetricWorker(client *http.Client, host, hashkey string, jobs <-chan Metrics
 			req.Header.Set("HashSHA256", calculateHash(buf, hashkey))
 		}
 
-		retry.Do(retry.DefaultRetryConfig(), func() error {
+		if err := retry.Do(retry.DefaultRetryConfig(), func() error {
 			resp, err := client.Do(req)
-			if err == nil {
-				resp.Body.Close()
+			if err != nil {
+				return err
 			}
-			return err
-		})
+			defer func() {
+				if cerr := resp.Body.Close(); cerr != nil {
+					log.Printf("failed to close response body: %v", cerr)
+				}
+			}()
+			return nil
+		}); err != nil {
+			log.Printf("metric push failed: %v", err)
+		}
+
 		time.Sleep(time.Duration(reportInterval) * time.Second)
 	}
 }
