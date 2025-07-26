@@ -63,6 +63,12 @@ var metrics = []Metrics{
 	{"RandomValue", "gauge", nil, nil, nil},
 }
 
+var (
+	buildVersion = "N/A"
+	buildDate    = "N/A"
+	buildCommit  = "N/A"
+)
+
 func calculateHash(buf *bytes.Buffer, key string) string {
 	mac := hmac.New(sha256.New, []byte(key))
 	mac.Write(buf.Bytes())
@@ -206,4 +212,23 @@ func MetricWorker(client *http.Client, host, hashkey string, jobs <-chan Metrics
 
 		time.Sleep(time.Duration(reportInterval) * time.Second)
 	}
+}
+
+func PrintBuildInfo() {
+	v := buildVersion
+	if v == "" {
+		v = "N/A"
+	}
+	d := buildDate
+	if d == "" {
+		d = "N/A"
+	}
+	c := buildCommit
+	if c == "" {
+		c = "N/A"
+	}
+
+	log.Printf("Build version: %s\n", v)
+	log.Printf("Build date: %s\n", d)
+	log.Printf("Build commit: %s\n", c)
 }
