@@ -57,5 +57,5 @@ func run() error {
 	}
 
 	logger.Log.Info("Starting server", zap.String("address", cfg.Address))
-	return server.StartServer(cfg.Address, storage, cfg.HashKey)
+	return server.StartServer(cfg.Address, storage, cfg.HashKey, cfg.CryptoKey)
 }

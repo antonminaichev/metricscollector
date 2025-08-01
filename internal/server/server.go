@@ -1,9 +1,11 @@
 package server
 
 import (
+	"log"
 	"net/http"
 	"time"
 
+	"github.com/antonminaichev/metricscollector/internal/crypto"
 	"github.com/antonminaichev/metricscollector/internal/logger"
 	"github.com/antonminaichev/metricscollector/internal/server/middleware"
 	"github.com/antonminaichev/metricscollector/internal/server/router"
@@ -15,13 +17,20 @@ import (
 	"go.uber.org/zap"
 )
 
-func StartServer(addr string, storage storage.Storage, hashKey string) error {
+func StartServer(addr string, storage storage.Storage, hashKey string, privKeyPath string) error {
+	privKey, err := crypto.LoadPrivateKey(privKeyPath)
+	if err != nil {
+		log.Fatalf("Failed to load private key: %v", err)
+	}
+
 	server := &http.Server{
 		Addr: addr,
 		Handler: logger.WithLogging(
 			middleware.HashHandler(
-				middleware.GzipHandler(
-					router.NewRouter(storage),
+				middleware.RSADecryptMiddleware(privKey)(
+					middleware.GzipHandler(
+						router.NewRouter(storage),
+					),
 				),
 				hashKey,
 			),

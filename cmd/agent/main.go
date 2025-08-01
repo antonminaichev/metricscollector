@@ -64,7 +64,7 @@ func run() error {
 	for i := 0; i < cfg.RateLimit; i++ {
 		go func() {
 			defer wg.Done()
-			agent.MetricWorker(client, cfg.Address, cfg.HashKey, jobs, cfg.ReportInterval)
+			agent.MetricWorker(client, cfg.Address, cfg.HashKey, jobs, cfg.ReportInterval, cfg.CryptoKey)
 		}()
 	}
 

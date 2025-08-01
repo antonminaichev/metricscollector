@@ -15,6 +15,7 @@ type Config struct {
 	Restore            bool   `env:"RESTORE" envDefault:"true"`
 	DatabaseConnection string `env:"DATABASE_DSN"`
 	HashKey            string `env:"KEY"`
+	CryptoKey          string `env:"CRYPTO_KEY"`
 }
 
 // NewConfig initialises new server configuration.
@@ -32,6 +33,7 @@ func NewConfig() (*Config, error) {
 	restore := flag.Bool("r", cfg.Restore, "Restore metrics from file")
 	databaseConnection := flag.String("d", cfg.DatabaseConnection, "Database connection string")
 	hashkey := flag.String("k", "", "Hash key")
+	cryptoKey := flag.String("crypto-key", cfg.CryptoKey, "Path to private key")
 
 	flag.Parse()
 
@@ -45,6 +47,7 @@ func NewConfig() (*Config, error) {
 	if cfg.HashKey == "" {
 		cfg.HashKey = *hashkey
 	}
+	cfg.CryptoKey = *cryptoKey
 
 	return cfg, nil
 }
