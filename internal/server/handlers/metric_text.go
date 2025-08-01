@@ -77,9 +77,15 @@ func GetMetric(rw http.ResponseWriter, r *http.Request, s storage.MetricReader) 
 	}
 
 	if mType == storage.Counter && delta != nil {
-		io.WriteString(rw, strconv.FormatInt(*delta, 10))
+		if _, err := io.WriteString(rw, strconv.FormatInt(*delta, 10)); err != nil {
+			http.Error(rw, "Failed to write response", http.StatusInternalServerError)
+			return
+		}
 	} else if mType == storage.Gauge && value != nil {
-		io.WriteString(rw, strconv.FormatFloat(*value, 'f', -1, 64))
+		if _, err := io.WriteString(rw, strconv.FormatFloat(*value, 'f', -1, 64)); err != nil {
+			http.Error(rw, "Failed to write response", http.StatusInternalServerError)
+			return
+		}
 	} else {
 		http.Error(rw, "Metric value is nil", http.StatusNotFound)
 	}

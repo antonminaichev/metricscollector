@@ -12,13 +12,40 @@ import (
 	"github.com/antonminaichev/metricscollector/internal/agent"
 )
 
+var (
+	buildVersion = "N/A"
+	buildDate    = "N/A"
+	buildCommit  = "N/A"
+)
+
 func main() {
 	if err := run(); err != nil {
 		panic(err)
 	}
 }
 
+func printBuildInfo() {
+	v := buildVersion
+	if v == "" {
+		v = "N/A"
+	}
+	d := buildDate
+	if d == "" {
+		d = "N/A"
+	}
+	c := buildCommit
+	if c == "" {
+		c = "N/A"
+	}
+
+	log.Printf("Build version: %s\n", v)
+	log.Printf("Build date: %s\n", d)
+	log.Printf("Build commit: %s\n", c)
+}
+
 func run() error {
+	printBuildInfo()
+
 	client := &http.Client{}
 	cfg, err := NewConfig()
 	if err != nil {
