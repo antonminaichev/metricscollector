@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/hmac"
+	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -17,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/antonminaichev/metricscollector/internal/crypto"
 	"github.com/antonminaichev/metricscollector/internal/retry"
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/mem"
@@ -164,9 +166,13 @@ func CollectSystemMetrics(ctx context.Context, pollInterval int, jobs chan<- Met
 }
 
 // MetricWorker initialises worker for metric collection.
-func MetricWorker(client *http.Client, host, hashkey string, jobs <-chan Metrics, reportInterval int) {
+func MetricWorker(client *http.Client, host, hashkey string, jobs <-chan Metrics, reportInterval int, cryptoKeyPath string) {
 	if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {
 		host = "http://" + host
+	}
+	pubKey, err := crypto.LoadPublicKey(cryptoKeyPath)
+	if err != nil {
+		log.Fatalf("MetricWorker: failed to load public key: %v", err)
 	}
 	for m := range jobs {
 		buf := bytes.NewBuffer(nil)
@@ -181,29 +187,59 @@ func MetricWorker(client *http.Client, host, hashkey string, jobs <-chan Metrics
 			continue
 		}
 
-		url := fmt.Sprintf("%s/update", host)
-		req, _ := http.NewRequest(http.MethodPost, url, buf)
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Content-Encoding", "gzip")
-		if hashkey != "" {
-			req.Header.Set("HashSHA256", calculateHash(buf, hashkey))
-		}
-
-		if err := retry.Do(retry.DefaultRetryConfig(), func() error {
-			resp, err := client.Do(req)
-			if err != nil {
-				return err
-			}
-			defer func() {
-				if cerr := resp.Body.Close(); cerr != nil {
-					log.Printf("failed to close response body: %v", cerr)
-				}
-			}()
-			return nil
-		}); err != nil {
-			log.Printf("metric push failed: %v", err)
+		if pubKey != nil {
+			sendEncrypted(client, host, hashkey, buf, pubKey)
+		} else {
+			sendPlain(client, host, hashkey, buf)
 		}
 
 		time.Sleep(time.Duration(reportInterval) * time.Second)
 	}
+}
+
+func sendEncrypted(client *http.Client, host, hashkey string, buf *bytes.Buffer, pubKey *rsa.PublicKey) {
+	encrypted, err := crypto.EncryptRSA(pubKey, buf.Bytes())
+	if err != nil {
+		log.Printf("encryption failed: %v", err)
+		return
+	}
+
+	req, _ := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/update", host), bytes.NewBuffer(encrypted))
+	req.Header.Set("Content-Type", "application/octet-stream")
+	req.Header.Set("Content-Encoding", "gzip")
+	if hashkey != "" {
+		req.Header.Set("HashSHA256", calculateHash(buf, hashkey))
+	}
+
+	if err := doRequest(client, req); err != nil {
+		log.Printf("metric push failed (encrypted): %v", err)
+	}
+}
+
+func sendPlain(client *http.Client, host, hashkey string, buf *bytes.Buffer) {
+	req, _ := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/update", host), buf)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Encoding", "gzip")
+	if hashkey != "" {
+		req.Header.Set("HashSHA256", calculateHash(buf, hashkey))
+	}
+
+	if err := doRequest(client, req); err != nil {
+		log.Printf("metric push failed (plain): %v", err)
+	}
+}
+
+func doRequest(client *http.Client, req *http.Request) error {
+	return retry.Do(retry.DefaultRetryConfig(), func() error {
+		resp, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if cerr := resp.Body.Close(); cerr != nil {
+				log.Printf("failed to close response body: %v", cerr)
+			}
+		}()
+		return nil
+	})
 }

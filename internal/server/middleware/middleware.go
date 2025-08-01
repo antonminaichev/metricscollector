@@ -5,12 +5,15 @@ import (
 	"bytes"
 	"compress/gzip"
 	"crypto/hmac"
+	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
 	"log"
 	"net/http"
 	"strings"
+
+	"github.com/antonminaichev/metricscollector/internal/crypto"
 )
 
 type gzipResponseWriter struct {
@@ -112,6 +115,39 @@ func HashHandler(next http.Handler, key string) http.Handler {
 			log.Printf("failed to write response body: %v", err)
 		}
 	})
+}
+
+func RSADecryptMiddleware(privateKey *rsa.PrivateKey) func(http.Handler) http.Handler {
+	if privateKey == nil {
+		return func(next http.Handler) http.Handler {
+			return next
+		}
+	}
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Только для POST-запросов
+			if r.Method != http.MethodPost {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			ciphertext, err := io.ReadAll(r.Body)
+			if err != nil {
+				http.Error(w, "Failed to read body", http.StatusBadRequest)
+				return
+			}
+
+			plaintext, err := crypto.DecryptRSA(privateKey, ciphertext)
+			if err != nil {
+				http.Error(w, "Failed to decrypt body", http.StatusBadRequest)
+				return
+			}
+
+			r.Body = io.NopCloser(bytes.NewReader(plaintext))
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 type hashResponseWriter struct {

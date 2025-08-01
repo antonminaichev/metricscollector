@@ -13,6 +13,7 @@ type Config struct {
 	ReportInterval int    `env:"REPORT_INTERVAL" envDefault:"2"`
 	RateLimit      int    `env:"RATE_LIMIT" envDefault:"30"`
 	HashKey        string `env:"KEY"`
+	CryptoKey      string `env:"CRYPTO_KEY"`
 }
 
 // NewConfig initialises new agent configuration.
@@ -26,12 +27,14 @@ func NewConfig() (*Config, error) {
 	pollInterval := flag.Int("p", cfg.PollInterval, "Poll interval, seconds")
 	rateLimit := flag.Int("l", cfg.RateLimit, "Max concurrent requests")
 	hashKey := flag.String("k", cfg.HashKey, "Hash key")
+	cryptoKey := flag.String("crypto-key", cfg.CryptoKey, "Path to public key")
 	flag.Parse()
 	cfg.Address = *address
 	cfg.ReportInterval = *reportInterval
 	cfg.PollInterval = *pollInterval
 	cfg.RateLimit = *rateLimit
 	cfg.HashKey = *hashKey
+	cfg.CryptoKey = *cryptoKey
 
 	return cfg, nil
 }
