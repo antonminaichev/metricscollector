@@ -1,26 +1,80 @@
 package main
 
 import (
+	"encoding/json"
+	"errors"
 	"flag"
+	"io"
+	"os"
+	"strings"
 
 	"github.com/caarlos0/env"
 )
 
 // Config stores server setting.
 type Config struct {
-	Address            string `env:"ADDRESS" envDefault:"localhost:8080"`
-	LogLevel           string `env:"LOG_LEVEL" envDefault:"INFO"`
-	StoreInterval      int    `env:"STORE_INTERVAL" envDefault:"300"`
-	FileStoragePath    string `env:"FILE_STORAGE_PATH" envDefault:"./metrics/metrics.json"`
-	Restore            bool   `env:"RESTORE" envDefault:"true"`
+	Address            string `env:"ADDRESS"`
+	LogLevel           string `env:"LOG_LEVEL"`
+	StoreInterval      int    `env:"STORE_INTERVAL"`
+	FileStoragePath    string `env:"FILE_STORAGE_PATH"`
+	Restore            bool   `env:"RESTORE"`
 	DatabaseConnection string `env:"DATABASE_DSN"`
 	HashKey            string `env:"KEY"`
 	CryptoKey          string `env:"CRYPTO_KEY"`
 }
 
+func loadJSONConfig(path string, cfg *Config) error {
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	defer f.Close()
+
+	dec := json.NewDecoder(f)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(cfg); err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+func pickConfigPathFromArgs(args []string) string {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "-c":
+			if i+1 < len(args) {
+				return args[i+1]
+			}
+			return ""
+		case strings.HasPrefix(a, "-c="):
+			return strings.TrimPrefix(a, "-c=")
+		}
+	}
+	return ""
+}
+
 // NewConfig initialises new server configuration.
 func NewConfig() (*Config, error) {
-	cfg := &Config{}
+	cfg := &Config{Address: "localhost:8080", LogLevel: "INFO", StoreInterval: 300, FileStoragePath: "./metrics/metrics.json", Restore: true}
+
+	configPath := pickConfigPathFromArgs(os.Args[1:])
+	if configPath == "" {
+		configPath = os.Getenv("CONFIG")
+	}
+
+	if configPath != "" {
+		if err := loadJSONConfig(configPath, cfg); err != nil {
+			return nil, err
+		}
+	}
+
 	if err := env.Parse(cfg); err != nil {
 		return nil, err
 	}
@@ -34,6 +88,7 @@ func NewConfig() (*Config, error) {
 	databaseConnection := flag.String("d", cfg.DatabaseConnection, "Database connection string")
 	hashkey := flag.String("k", "", "Hash key")
 	cryptoKey := flag.String("crypto-key", cfg.CryptoKey, "Path to private key")
+	_ = flag.String("c", configPath, "Path to config file (JSON)")
 
 	flag.Parse()
 
