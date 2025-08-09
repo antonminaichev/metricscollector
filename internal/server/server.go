@@ -1,8 +1,11 @@
 package server
 
 import (
+	"context"
 	"log"
 	"net/http"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/antonminaichev/metricscollector/internal/crypto"
@@ -36,7 +39,37 @@ func StartServer(addr string, storage storage.Storage, hashKey string, privKeyPa
 			),
 		),
 	}
-	return server.ListenAndServe()
+
+	ctx, stop := signal.NotifyContext(context.Background(),
+		syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	defer stop()
+
+	errCh := make(chan error, 1)
+	go func() {
+		if err := server.ListenAndServe(); err != nil {
+			errCh <- err
+			return
+		}
+		close(errCh)
+	}()
+
+	select {
+	case <-ctx.Done():
+		logger.Log.Info("Shutdown signal received, stopping HTTP…")
+
+		shCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+
+		if err := server.Shutdown(shCtx); err != nil {
+			logger.Log.Warn("Shutdown error", zap.Error(err))
+		}
+
+		logger.Log.Info("Server shutdown complete")
+		return nil
+
+	case err := <-errCh:
+		return err
+	}
 }
 
 func SetupStorage(DSN string, fspath string, restore bool, storeInterval int) (storage.Storage, error) {

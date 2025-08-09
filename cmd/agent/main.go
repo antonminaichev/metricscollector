@@ -56,8 +56,16 @@ func run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go agent.CollectMetrics(ctx, cfg.PollInterval, jobs)
-	go agent.CollectSystemMetrics(ctx, cfg.PollInterval, jobs)
+	var collectWG sync.WaitGroup
+	collectWG.Add(2)
+	go func() {
+		defer collectWG.Done()
+		agent.CollectMetrics(ctx, cfg.PollInterval, jobs)
+	}()
+	go func() {
+		defer collectWG.Done()
+		agent.CollectSystemMetrics(ctx, cfg.PollInterval, jobs)
+	}()
 
 	var wg sync.WaitGroup
 	wg.Add(cfg.RateLimit - 1)
@@ -70,13 +78,14 @@ func run() error {
 
 	// Ждем сигнала завершения
 	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	<-sigChan
 	log.Println("Получен сигнал завершения работы")
+	cancel()
+	collectWG.Wait()
 
 	close(jobs)
 	wg.Wait()
-	cancel()
 	log.Println("agent stopped")
 	return nil
 }
