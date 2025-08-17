@@ -3,15 +3,21 @@ package handlers
 
 import (
 	"encoding/json"
+	"net"
 	"net/http"
+	"strings"
 
 	"github.com/antonminaichev/metricscollector/internal/server/storage"
 )
 
 // PostMetricJSON updates single metric value via JSON request.
-func PostMetricJSON(rw http.ResponseWriter, r *http.Request, s storage.Storage) {
+func PostMetricJSON(rw http.ResponseWriter, r *http.Request, s storage.Storage, trustedCIDR string) {
 	if r.Method != http.MethodPost {
 		rw.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if !ipAllowed(r, trustedCIDR) {
+		http.Error(rw, "client ip is forbidden", http.StatusForbidden)
 		return
 	}
 
@@ -118,9 +124,13 @@ func GetMetricJSON(rw http.ResponseWriter, r *http.Request, s storage.MetricRead
 }
 
 // PostMetricsJSON updates a banch of metric values via JSON request.
-func PostMetricsJSON(rw http.ResponseWriter, r *http.Request, s storage.Storage) {
+func PostMetricsJSON(rw http.ResponseWriter, r *http.Request, s storage.Storage, trustedCIDR string) {
 	if r.Method != http.MethodPost {
 		rw.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if !ipAllowed(r, trustedCIDR) {
+		http.Error(rw, "client ip is forbidden", http.StatusForbidden)
 		return
 	}
 
@@ -176,4 +186,22 @@ func PostMetricsJSON(rw http.ResponseWriter, r *http.Request, s storage.Storage)
 	if err := json.NewEncoder(rw).Encode(response); err != nil {
 		http.Error(rw, "Can't encode response", http.StatusInternalServerError)
 	}
+}
+
+// ipAllowed проверяет, что X-Real-IP попадает в доверенную подсеть из ENV TRUSTED_SUBNET.
+func ipAllowed(r *http.Request, trustedCIDR string) bool {
+	xr := strings.TrimSpace(r.Header.Get("X-Real-IP"))
+	if xr == "" {
+		return false
+	}
+	ip := net.ParseIP(xr)
+	if ip == nil {
+		return false
+	}
+	_, n, err := net.ParseCIDR(trustedCIDR)
+	if err != nil {
+		// Неверная подсеть в конфиге — считаем запрос недоверенным
+		return false
+	}
+	return n.Contains(ip)
 }

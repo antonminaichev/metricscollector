@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"github.com/antonminaichev/metricscollector/internal/logger"
 	"github.com/antonminaichev/metricscollector/internal/server"
@@ -46,6 +47,8 @@ func run() error {
 	if err != nil {
 		log.Fatal(err)
 	}
+	//Unsure how to pass subnet flag to
+	_ = os.Setenv("TRUSTED_SUBNET", cfg.TrustedSubnet)
 
 	if err = logger.Initialize(cfg.LogLevel); err != nil {
 		return err
@@ -57,5 +60,5 @@ func run() error {
 	}
 
 	logger.Log.Info("Starting server", zap.String("address", cfg.Address))
-	return server.StartServer(cfg.Address, storage, cfg.HashKey, cfg.CryptoKey)
+	return server.StartServer(cfg.Address, storage, cfg.HashKey, cfg.CryptoKey, cfg.TrustedSubnet)
 }

@@ -33,8 +33,9 @@ func TestPostMetricJSON(t *testing.T) {
 		body, _ := json.Marshal(metric)
 
 		req := httptest.NewRequest(http.MethodPost, "/update/", bytes.NewReader(body))
+		req.Header.Set("X-Real-IP", "192.168.31.32")
 		w := httptest.NewRecorder()
-		PostMetricJSON(w, req, store)
+		PostMetricJSON(w, req, store, "192.168.31.0/24")
 
 		assert.Equal(t, http.StatusOK, w.Code)
 		assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
@@ -56,8 +57,9 @@ func TestPostMetricJSON(t *testing.T) {
 		body, _ := json.Marshal(metric)
 
 		req := httptest.NewRequest(http.MethodPost, "/update/", bytes.NewReader(body))
+		req.Header.Set("X-Real-IP", "192.168.31.32")
 		w := httptest.NewRecorder()
-		PostMetricJSON(w, req, store)
+		PostMetricJSON(w, req, store, "192.168.31.0/24")
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
@@ -71,16 +73,18 @@ func TestPostMetricJSON(t *testing.T) {
 
 	t.Run("invalid method", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/update/", nil)
+		req.Header.Set("X-Real-IP", "192.168.31.32")
 		w := httptest.NewRecorder()
-		PostMetricJSON(w, req, store)
+		PostMetricJSON(w, req, store, "192.168.31.0/24")
 
 		assert.Equal(t, http.StatusMethodNotAllowed, w.Code)
 	})
 
 	t.Run("invalid JSON", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/update/", strings.NewReader("invalid json"))
+		req.Header.Set("X-Real-IP", "192.168.31.32")
 		w := httptest.NewRecorder()
-		PostMetricJSON(w, req, store)
+		PostMetricJSON(w, req, store, "192.168.31.0/24")
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
@@ -93,8 +97,9 @@ func TestPostMetricJSON(t *testing.T) {
 		body, _ := json.Marshal(metric)
 
 		req := httptest.NewRequest(http.MethodPost, "/update/", bytes.NewReader(body))
+		req.Header.Set("X-Real-IP", "192.168.31.32")
 		w := httptest.NewRecorder()
-		PostMetricJSON(w, req, store)
+		PostMetricJSON(w, req, store, "192.168.31.0/24")
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
@@ -107,8 +112,9 @@ func TestPostMetricJSON(t *testing.T) {
 		body, _ := json.Marshal(metric)
 
 		req := httptest.NewRequest(http.MethodPost, "/update/", bytes.NewReader(body))
+		req.Header.Set("X-Real-IP", "192.168.31.32")
 		w := httptest.NewRecorder()
-		PostMetricJSON(w, req, store)
+		PostMetricJSON(w, req, store, "192.168.31.0/24")
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
@@ -121,8 +127,9 @@ func TestPostMetricJSON(t *testing.T) {
 		body, _ := json.Marshal(metric)
 
 		req := httptest.NewRequest(http.MethodPost, "/update/", bytes.NewReader(body))
+		req.Header.Set("X-Real-IP", "192.168.31.32")
 		w := httptest.NewRecorder()
-		PostMetricJSON(w, req, store)
+		PostMetricJSON(w, req, store, "192.168.31.0/24")
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
@@ -135,8 +142,9 @@ func TestPostMetricJSON(t *testing.T) {
 		body, _ := json.Marshal(metric)
 
 		req := httptest.NewRequest(http.MethodPost, "/update/", bytes.NewReader(body))
+		req.Header.Set("X-Real-IP", "192.168.31.32")
 		w := httptest.NewRecorder()
-		PostMetricJSON(w, req, store)
+		PostMetricJSON(w, req, store, "192.168.31.0/24")
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
@@ -150,8 +158,9 @@ func TestPostMetricJSON(t *testing.T) {
 		body, _ := json.Marshal(metric)
 
 		req := httptest.NewRequest(http.MethodPost, "/update/", bytes.NewReader(body))
+		req.Header.Set("X-Real-IP", "192.168.31.32")
 		w := httptest.NewRecorder()
-		PostMetricJSON(w, req, store)
+		PostMetricJSON(w, req, store, "192.168.31.0/24")
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
@@ -243,8 +252,9 @@ func TestPostMetricsJSON(t *testing.T) {
 		body, _ := json.Marshal(metrics)
 
 		req := httptest.NewRequest(http.MethodPost, "/updates/", bytes.NewReader(body))
+		req.Header.Set("X-Real-IP", "192.168.31.32")
 		w := httptest.NewRecorder()
-		PostMetricsJSON(w, req, store)
+		PostMetricsJSON(w, req, store, "192.168.31.0/24")
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
@@ -256,8 +266,9 @@ func TestPostMetricsJSON(t *testing.T) {
 
 	t.Run("invalid JSON", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/updates/", strings.NewReader("invalid"))
+		req.Header.Set("X-Real-IP", "192.168.31.32")
 		w := httptest.NewRecorder()
-		PostMetricsJSON(w, req, store)
+		PostMetricsJSON(w, req, store, "192.168.31.0/24")
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
@@ -501,8 +512,9 @@ func ExamplePostMetricJSON() {
 	body, _ := json.Marshal(m)
 
 	req := httptest.NewRequest(http.MethodPost, "/update/", bytes.NewReader(body))
+	req.Header.Set("X-Real-IP", "192.168.31.32")
 	w := httptest.NewRecorder()
-	PostMetricJSON(w, req, s)
+	PostMetricJSON(w, req, s, "192.168.31.0/24")
 	resp := w.Result()
 	defer resp.Body.Close()
 
@@ -552,8 +564,9 @@ func ExamplePostMetric() {
 	body, _ := json.Marshal(m)
 
 	req := httptest.NewRequest(http.MethodPost, "/update/", bytes.NewReader(body))
+	req.Header.Set("X-Real-IP", "192.168.31.32")
 	w := httptest.NewRecorder()
-	PostMetricJSON(w, req, s)
+	PostMetricJSON(w, req, s, "192.168.31.0/24")
 	resp := w.Result()
 	defer resp.Body.Close()
 
@@ -602,8 +615,9 @@ func ExamplePostMetricsJSON() {
 	body, _ := json.Marshal(metrics)
 
 	req := httptest.NewRequest(http.MethodPost, "/updates/", bytes.NewReader(body))
+	req.Header.Set("X-Real-IP", "192.168.31.32")
 	w := httptest.NewRecorder()
-	PostMetricsJSON(w, req, s)
+	PostMetricsJSON(w, req, s, "192.168.31.0/24")
 	resp := w.Result()
 	defer resp.Body.Close()
 

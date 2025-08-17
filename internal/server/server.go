@@ -30,9 +30,10 @@ type Config struct {
 	DatabaseConnection string `env:"DATABASE_DSN"`
 	HashKey            string `env:"KEY"`
 	CryptoKey          string `env:"CRYPTO_KEY"`
+	TrustedSubnet      string `env:"TRUSTED_SUBNET"`
 }
 
-func StartServer(addr string, storage storage.Storage, hashKey string, privKeyPath string) error {
+func StartServer(addr string, storage storage.Storage, hashKey string, privKeyPath string, trustedCIDR string) error {
 	privKey, err := crypto.LoadPrivateKey(privKeyPath)
 	if err != nil {
 		log.Fatalf("Failed to load private key: %v", err)
@@ -44,7 +45,7 @@ func StartServer(addr string, storage storage.Storage, hashKey string, privKeyPa
 			middleware.HashHandler(
 				middleware.RSADecryptMiddleware(privKey)(
 					middleware.GzipHandler(
-						router.NewRouter(storage),
+						router.NewRouter(storage, trustedCIDR),
 					),
 				),
 				hashKey,
