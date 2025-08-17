@@ -1,9 +1,14 @@
 package server
 
 import (
+	"context"
+	"log"
 	"net/http"
+	"os/signal"
+	"syscall"
 	"time"
 
+	"github.com/antonminaichev/metricscollector/internal/crypto"
 	"github.com/antonminaichev/metricscollector/internal/logger"
 	"github.com/antonminaichev/metricscollector/internal/server/middleware"
 	"github.com/antonminaichev/metricscollector/internal/server/router"
@@ -15,19 +20,68 @@ import (
 	"go.uber.org/zap"
 )
 
-func StartServer(addr string, storage storage.Storage, hashKey string) error {
+// Config stores server setting.
+type Config struct {
+	Address            string `env:"ADDRESS"`
+	LogLevel           string `env:"LOG_LEVEL"`
+	StoreInterval      int    `env:"STORE_INTERVAL"`
+	FileStoragePath    string `env:"FILE_STORAGE_PATH"`
+	Restore            bool   `env:"RESTORE"`
+	DatabaseConnection string `env:"DATABASE_DSN"`
+	HashKey            string `env:"KEY"`
+	CryptoKey          string `env:"CRYPTO_KEY"`
+}
+
+func StartServer(addr string, storage storage.Storage, hashKey string, privKeyPath string) error {
+	privKey, err := crypto.LoadPrivateKey(privKeyPath)
+	if err != nil {
+		log.Fatalf("Failed to load private key: %v", err)
+	}
+
 	server := &http.Server{
 		Addr: addr,
 		Handler: logger.WithLogging(
 			middleware.HashHandler(
-				middleware.GzipHandler(
-					router.NewRouter(storage),
+				middleware.RSADecryptMiddleware(privKey)(
+					middleware.GzipHandler(
+						router.NewRouter(storage),
+					),
 				),
 				hashKey,
 			),
 		),
 	}
-	return server.ListenAndServe()
+
+	ctx, stop := signal.NotifyContext(context.Background(),
+		syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	defer stop()
+
+	errCh := make(chan error, 1)
+	go func() {
+		if err := server.ListenAndServe(); err != nil {
+			errCh <- err
+			return
+		}
+		close(errCh)
+	}()
+
+	select {
+	case <-ctx.Done():
+		logger.Log.Info("Shutdown signal received, stopping HTTP…")
+
+		shCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+
+		if err := server.Shutdown(shCtx); err != nil {
+			logger.Log.Warn("Shutdown error", zap.Error(err))
+		}
+
+		logger.Log.Info("Server shutdown complete")
+		return nil
+
+	case err := <-errCh:
+		return err
+	}
 }
 
 func SetupStorage(DSN string, fspath string, restore bool, storeInterval int) (storage.Storage, error) {

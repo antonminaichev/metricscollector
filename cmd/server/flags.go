@@ -2,24 +2,28 @@ package main
 
 import (
 	"flag"
+	"os"
 
+	"github.com/antonminaichev/metricscollector/internal/conf"
+	"github.com/antonminaichev/metricscollector/internal/server"
 	"github.com/caarlos0/env"
 )
 
-// Config stores server setting.
-type Config struct {
-	Address            string `env:"ADDRESS" envDefault:"localhost:8080"`
-	LogLevel           string `env:"LOG_LEVEL" envDefault:"INFO"`
-	StoreInterval      int    `env:"STORE_INTERVAL" envDefault:"300"`
-	FileStoragePath    string `env:"FILE_STORAGE_PATH" envDefault:"./metrics/metrics.json"`
-	Restore            bool   `env:"RESTORE" envDefault:"true"`
-	DatabaseConnection string `env:"DATABASE_DSN"`
-	HashKey            string `env:"KEY"`
-}
-
 // NewConfig initialises new server configuration.
-func NewConfig() (*Config, error) {
-	cfg := &Config{}
+func NewConfig() (*server.Config, error) {
+	cfg := &server.Config{Address: "localhost:8080", LogLevel: "INFO", StoreInterval: 300, FileStoragePath: "./metrics/metrics.json", Restore: true}
+
+	configPath := conf.PickConfigPathFromArgs(os.Args[1:])
+	if configPath == "" {
+		configPath = os.Getenv("CONFIG")
+	}
+
+	if configPath != "" {
+		if err := conf.LoadJSONConfig(configPath, cfg); err != nil {
+			return nil, err
+		}
+	}
+
 	if err := env.Parse(cfg); err != nil {
 		return nil, err
 	}
@@ -32,6 +36,8 @@ func NewConfig() (*Config, error) {
 	restore := flag.Bool("r", cfg.Restore, "Restore metrics from file")
 	databaseConnection := flag.String("d", cfg.DatabaseConnection, "Database connection string")
 	hashkey := flag.String("k", "", "Hash key")
+	cryptoKey := flag.String("crypto-key", cfg.CryptoKey, "Path to private key")
+	_ = flag.String("c", configPath, "Path to config file (JSON)")
 
 	flag.Parse()
 
@@ -45,6 +51,7 @@ func NewConfig() (*Config, error) {
 	if cfg.HashKey == "" {
 		cfg.HashKey = *hashkey
 	}
+	cfg.CryptoKey = *cryptoKey
 
 	return cfg, nil
 }

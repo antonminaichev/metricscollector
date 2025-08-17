@@ -1,0 +1,5 @@
+{
+  "StoreInterval": 15,
+  "Restore": true,
+  "DatabaseConnection": "postgres://user:pass@db:5432/metrics?sslmode=disable"
+}
