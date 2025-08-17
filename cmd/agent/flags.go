@@ -1,74 +1,25 @@
 package main
 
 import (
-	"encoding/json"
-	"errors"
 	"flag"
-	"io"
 	"os"
-	"strings"
 
+	"github.com/antonminaichev/metricscollector/internal/agent"
+	"github.com/antonminaichev/metricscollector/internal/conf"
 	"github.com/caarlos0/env"
 )
 
-// Config stores agent setting.
-type Config struct {
-	Address        string `env:"ADDRESS"`
-	PollInterval   int    `env:"POLL_INTERVAL"`
-	ReportInterval int    `env:"REPORT_INTERVAL"`
-	RateLimit      int    `env:"RATE_LIMIT"`
-	HashKey        string `env:"KEY"`
-	CryptoKey      string `env:"CRYPTO_KEY"`
-}
-
-func loadJSONConfig(path string, cfg *Config) error {
-	f, err := os.Open(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
-	defer f.Close()
-
-	dec := json.NewDecoder(f)
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(cfg); err != nil {
-		if errors.Is(err, io.EOF) {
-			return nil
-		}
-		return err
-	}
-	return nil
-}
-
-func pickConfigPathFromArgs(args []string) string {
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		switch {
-		case a == "-c":
-			if i+1 < len(args) {
-				return args[i+1]
-			}
-			return ""
-		case strings.HasPrefix(a, "-c="):
-			return strings.TrimPrefix(a, "-c=")
-		}
-	}
-	return ""
-}
-
 // NewConfig initialises new agent configuration.
-func NewConfig() (*Config, error) {
-	cfg := &Config{Address: "localhost:8080", ReportInterval: 2, PollInterval: 2, RateLimit: 30}
+func NewConfig() (*agent.Config, error) {
+	cfg := &agent.Config{Address: "localhost:8080", ReportInterval: 2, PollInterval: 2, RateLimit: 30}
 
-	configPath := pickConfigPathFromArgs(os.Args[1:])
+	configPath := conf.PickConfigPathFromArgs(os.Args[1:])
 	if configPath == "" {
 		configPath = os.Getenv("CONFIG")
 	}
 
 	if configPath != "" {
-		if err := loadJSONConfig(configPath, cfg); err != nil {
+		if err := conf.LoadJSONConfig(configPath, cfg); err != nil {
 			return nil, err
 		}
 	}

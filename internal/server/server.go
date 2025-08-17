@@ -20,6 +20,18 @@ import (
 	"go.uber.org/zap"
 )
 
+// Config stores server setting.
+type Config struct {
+	Address            string `env:"ADDRESS"`
+	LogLevel           string `env:"LOG_LEVEL"`
+	StoreInterval      int    `env:"STORE_INTERVAL"`
+	FileStoragePath    string `env:"FILE_STORAGE_PATH"`
+	Restore            bool   `env:"RESTORE"`
+	DatabaseConnection string `env:"DATABASE_DSN"`
+	HashKey            string `env:"KEY"`
+	CryptoKey          string `env:"CRYPTO_KEY"`
+}
+
 func StartServer(addr string, storage storage.Storage, hashKey string, privKeyPath string) error {
 	privKey, err := crypto.LoadPrivateKey(privKeyPath)
 	if err != nil {

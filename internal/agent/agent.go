@@ -65,6 +65,16 @@ var metrics = []Metrics{
 	{"RandomValue", "gauge", nil, nil, nil},
 }
 
+// Config stores agent setting.
+type Config struct {
+	Address        string `env:"ADDRESS"`
+	PollInterval   int    `env:"POLL_INTERVAL"`
+	ReportInterval int    `env:"REPORT_INTERVAL"`
+	RateLimit      int    `env:"RATE_LIMIT"`
+	HashKey        string `env:"KEY"`
+	CryptoKey      string `env:"CRYPTO_KEY"`
+}
+
 func calculateHash(buf *bytes.Buffer, key string) string {
 	mac := hmac.New(sha256.New, []byte(key))
 	mac.Write(buf.Bytes())
