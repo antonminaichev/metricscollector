@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package metrics.v1;
+
+option go_package = "github.com/antonminaichev/metricscollector/internal/proto/metricsv1;metricsv1";
+
+message PushRequest {
+  bytes payload   = 1;
+
+  // HMAC-SHA256 (hex) от payload
+  string hash     = 2;
+
+  // Аналог X-Real-IP
+  string agent_ip = 3;
+
+  // true — если payload зашифрован RSA.
+  bool encrypted  = 4;
+}
+
+message PushResult {
+  int64 accepted = 1;
+  int64 failed   = 2;
+}
+
+service MetricsService {
+  // Client stream for metrics push
+  rpc Push (stream PushRequest) returns (PushResult);
+}

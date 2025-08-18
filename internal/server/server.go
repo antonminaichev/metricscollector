@@ -31,6 +31,8 @@ type Config struct {
 	HashKey            string `env:"KEY"`
 	CryptoKey          string `env:"CRYPTO_KEY"`
 	TrustedSubnet      string `env:"TRUSTED_SUBNET"`
+	Mode               string `env:"MODE"`
+	GRPCAddress        string `env:"GRPC_ADDRESS"`
 }
 
 func StartServer(addr string, storage storage.Storage, hashKey string, privKeyPath string, trustedCIDR string) error {

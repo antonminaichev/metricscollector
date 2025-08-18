@@ -1,4 +1,6 @@
 {
   "PollInterval": 10,
-  "ReportInterval": 10
+  "ReportInterval": 10,
+  "Mode": "grpc",
+  "CryptoKey": "../public.pem"
 }

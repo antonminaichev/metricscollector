@@ -74,6 +74,8 @@ type Config struct {
 	RateLimit      int    `env:"RATE_LIMIT"`
 	HashKey        string `env:"KEY"`
 	CryptoKey      string `env:"CRYPTO_KEY"`
+	Mode           string `env:"MODE"`
+	GRPCAddress    string `env:"GRPC_ADDRESS"`
 }
 
 func calculateHash(buf *bytes.Buffer, key string) string {

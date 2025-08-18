@@ -47,7 +47,7 @@ func run() error {
 	if err != nil {
 		log.Fatal(err)
 	}
-	//Unsure how to pass subnet flag to
+	//Unsure how to pass subnet flag to main.go without force SET ENV
 	_ = os.Setenv("TRUSTED_SUBNET", cfg.TrustedSubnet)
 
 	if err = logger.Initialize(cfg.LogLevel); err != nil {
@@ -59,6 +59,15 @@ func run() error {
 		return err
 	}
 
-	logger.Log.Info("Starting server", zap.String("address", cfg.Address))
+	if cfg.Mode == "grpc" {
+		addr := cfg.GRPCAddress
+		if addr == "" {
+			addr = cfg.Address
+		}
+		logger.Log.Info("Starting gRPC server", zap.String("address", addr))
+		return server.StartGRPCServer(addr, storage, cfg.HashKey, cfg.CryptoKey, cfg.TrustedSubnet)
+	}
+
+	logger.Log.Info("Starting HTTP server", zap.String("address", cfg.Address))
 	return server.StartServer(cfg.Address, storage, cfg.HashKey, cfg.CryptoKey, cfg.TrustedSubnet)
 }

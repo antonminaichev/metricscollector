@@ -2,5 +2,6 @@
   "StoreInterval": 15,
   "Restore": true,
   "DatabaseConnection": "postgres://user:pass@db:5432/metrics?sslmode=disable",
-  "TrustedSubnet": "192.168.31.0/24"
+  "TrustedSubnet": "192.168.31.0/24",
+  "Mode": "grpc"
 }
