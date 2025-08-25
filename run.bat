@@ -20,14 +20,14 @@ go build -ldflags "-X main.buildVersion=%VERSION% -X main.buildDate=%DATE% -X ma
 
 :: Запускаем сервер в отдельном окне
 set DATABASE_DSN=postgres://postgres:pass@localhost:5432?sslmode=disable
-start "Server" cmd /k ".\cmd\server\server.exe -a=localhost:8080 -i 10 -f ./metrics/metrics.json"
+start "Server" cmd /k ".\cmd\server\server.exe -a=localhost:8080 -i 10 -f ./metrics/metrics.json -crypto-key ../private.pem -c ./cmd/server/config/config.json"
 set SERVER_PID=%ERRORLEVEL%
 
 :: Ждем 2 секунды, чтобы сервер успел запуститься
 timeout /t 2
 
 :: Запускаем агента в отдельном окне
-start "Agent" cmd /k ".\cmd\agent\agent.exe"
+start "Agent" cmd /k ".\cmd\agent\agent.exe -c ./cmd/agent/config/config.json"
 set AGENT_PID=%ERRORLEVEL%
 
 echo Server and Agent are running...

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"net"
 	"net/http"
 	"runtime"
 	"strings"
@@ -73,6 +74,8 @@ type Config struct {
 	RateLimit      int    `env:"RATE_LIMIT"`
 	HashKey        string `env:"KEY"`
 	CryptoKey      string `env:"CRYPTO_KEY"`
+	Mode           string `env:"MODE"`
+	GRPCAddress    string `env:"GRPC_ADDRESS"`
 }
 
 func calculateHash(buf *bytes.Buffer, key string) string {
@@ -184,6 +187,7 @@ func MetricWorker(client *http.Client, host, hashkey string, jobs <-chan Metrics
 	if err != nil {
 		log.Fatalf("MetricWorker: failed to load public key: %v", err)
 	}
+	agentIP := getLocalIP()
 	for m := range jobs {
 		buf := bytes.NewBuffer(nil)
 		gw, _ := gzip.NewWriterLevel(buf, gzip.BestSpeed)
@@ -198,16 +202,16 @@ func MetricWorker(client *http.Client, host, hashkey string, jobs <-chan Metrics
 		}
 
 		if pubKey != nil {
-			sendEncrypted(client, host, hashkey, buf, pubKey)
+			sendEncrypted(client, host, hashkey, buf, pubKey, agentIP)
 		} else {
-			sendPlain(client, host, hashkey, buf)
+			sendPlain(client, host, hashkey, buf, agentIP)
 		}
 
 		time.Sleep(time.Duration(reportInterval) * time.Second)
 	}
 }
 
-func sendEncrypted(client *http.Client, host, hashkey string, buf *bytes.Buffer, pubKey *rsa.PublicKey) {
+func sendEncrypted(client *http.Client, host, hashkey string, buf *bytes.Buffer, pubKey *rsa.PublicKey, agentIP string) {
 	encrypted, err := crypto.EncryptRSA(pubKey, buf.Bytes())
 	if err != nil {
 		log.Printf("encryption failed: %v", err)
@@ -217,6 +221,9 @@ func sendEncrypted(client *http.Client, host, hashkey string, buf *bytes.Buffer,
 	req, _ := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/update", host), bytes.NewBuffer(encrypted))
 	req.Header.Set("Content-Type", "application/octet-stream")
 	req.Header.Set("Content-Encoding", "gzip")
+	if agentIP != "" {
+		req.Header.Set("X-Real-IP", agentIP)
+	}
 	if hashkey != "" {
 		req.Header.Set("HashSHA256", calculateHash(buf, hashkey))
 	}
@@ -226,10 +233,13 @@ func sendEncrypted(client *http.Client, host, hashkey string, buf *bytes.Buffer,
 	}
 }
 
-func sendPlain(client *http.Client, host, hashkey string, buf *bytes.Buffer) {
+func sendPlain(client *http.Client, host, hashkey string, buf *bytes.Buffer, agentIP string) {
 	req, _ := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/update", host), buf)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Content-Encoding", "gzip")
+	if agentIP != "" {
+		req.Header.Set("X-Real-IP", agentIP)
+	}
 	if hashkey != "" {
 		req.Header.Set("HashSHA256", calculateHash(buf, hashkey))
 	}
@@ -252,4 +262,18 @@ func doRequest(client *http.Client, req *http.Request) error {
 		}()
 		return nil
 	})
+}
+
+// getLocalIP defines local IP
+func getLocalIP() string {
+	// UDP-dial не делает реальный трафик; нужно лишь узнать локальный адрес сокета.
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = conn.Close() }()
+	if la, ok := conn.LocalAddr().(*net.UDPAddr); ok && la.IP != nil {
+		return la.IP.String()
+	}
+	return ""
 }

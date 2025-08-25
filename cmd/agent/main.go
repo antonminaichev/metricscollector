@@ -46,11 +46,11 @@ func printBuildInfo() {
 func run() error {
 	printBuildInfo()
 
-	client := &http.Client{}
 	cfg, err := NewConfig()
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	jobs := make(chan agent.Metrics, cfg.RateLimit*3)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -67,13 +67,25 @@ func run() error {
 		agent.CollectSystemMetrics(ctx, cfg.PollInterval, jobs)
 	}()
 
-	var wg sync.WaitGroup
-	wg.Add(cfg.RateLimit - 1)
-	for i := 0; i < cfg.RateLimit; i++ {
+	var sendWG sync.WaitGroup
+
+	if cfg.Mode == "grpc" {
+		sendWG.Add(1)
 		go func() {
-			defer wg.Done()
-			agent.MetricWorker(client, cfg.Address, cfg.HashKey, jobs, cfg.ReportInterval, cfg.CryptoKey)
+			defer sendWG.Done()
+			if err := agent.RunGRPCPublisher(ctx, cfg.GRPCAddress, cfg.HashKey, cfg.CryptoKey, jobs, cfg.ReportInterval); err != nil {
+				log.Printf("grpc publisher error: %v", err)
+			}
 		}()
+	} else {
+		client := &http.Client{}
+		sendWG.Add(cfg.RateLimit)
+		for i := 0; i < cfg.RateLimit; i++ {
+			go func() {
+				defer sendWG.Done()
+				agent.MetricWorker(client, cfg.Address, cfg.HashKey, jobs, cfg.ReportInterval, cfg.CryptoKey)
+			}()
+		}
 	}
 
 	// Ждем сигнала завершения
@@ -82,10 +94,11 @@ func run() error {
 	<-sigChan
 	log.Println("Получен сигнал завершения работы")
 	cancel()
-	collectWG.Wait()
 
+	collectWG.Wait()
 	close(jobs)
-	wg.Wait()
+	sendWG.Wait()
+
 	log.Println("agent stopped")
 	return nil
 }

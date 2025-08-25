@@ -39,7 +39,7 @@ func testRequest(t *testing.T, ts *httptest.Server, method,
 
 func TestHealthCheck(t *testing.T) {
 	storage := ms.NewMemoryStorage()
-	ts := httptest.NewServer(NewRouter(storage))
+	ts := httptest.NewServer(NewRouter(storage, "192.168.31.0/24"))
 	defer ts.Close()
 	var testTable = []struct {
 		url    string
@@ -59,7 +59,7 @@ func TestHealthCheck(t *testing.T) {
 
 func TestPostMetric(t *testing.T) {
 	storage := ms.NewMemoryStorage()
-	ts := httptest.NewServer(NewRouter(storage))
+	ts := httptest.NewServer(NewRouter(storage, "192.168.31.0/24"))
 	defer ts.Close()
 
 	testTable := []struct {
@@ -122,7 +122,7 @@ func TestPostMetric(t *testing.T) {
 
 func TestGetMetric(t *testing.T) {
 	storage := ms.NewMemoryStorage()
-	ts := httptest.NewServer(NewRouter(storage))
+	ts := httptest.NewServer(NewRouter(storage, "192.168.31.0/24"))
 	defer ts.Close()
 
 	delta := int64(100)
@@ -189,7 +189,7 @@ func TestGetMetric(t *testing.T) {
 
 func TestPrintAllMetrics(t *testing.T) {
 	storage := ms.NewMemoryStorage()
-	ts := httptest.NewServer(NewRouter(storage))
+	ts := httptest.NewServer(NewRouter(storage, "192.168.31.0/24"))
 	defer ts.Close()
 
 	delta := int64(52)
@@ -217,7 +217,7 @@ func BenchmarkServer_FileStorageUpdate(b *testing.B) {
 		b.Fatalf("failed to create file storage: %v", err)
 	}
 
-	handler := middleware.GzipHandler(NewRouter(store))
+	handler := middleware.GzipHandler(NewRouter(store, "192.168.31.0/24"))
 
 	metric := st.Metric{
 		ID:    "BenchmarkGauge",
