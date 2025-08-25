@@ -29,10 +29,7 @@ func RunGRPCPublisher(
 	reportInterval int,
 ) error {
 	log.Printf("[AGENT gRPC] dialing %s ...", addr)
-	conn, err := grpc.DialContext(ctx, addr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
-	)
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Printf("[AGENT gRPC] dial failed: %v", err)
 		return err
