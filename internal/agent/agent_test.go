@@ -298,13 +298,15 @@ func TestSendPlain(t *testing.T) {
 	client := &http.Client{}
 	buf := bytes.NewBufferString("test data")
 	hashkey := "secret_key"
+	agentIP := "127.0.0.1"
 
-	sendPlain(client, server.URL, hashkey, buf)
+	sendPlain(client, server.URL, hashkey, buf, agentIP)
 
 	assert.True(t, requestReceived)
 	assert.Equal(t, "application/json", receivedHeaders.Get("Content-Type"))
 	assert.Equal(t, "gzip", receivedHeaders.Get("Content-Encoding"))
 	assert.NotEmpty(t, receivedHeaders.Get("HashSHA256"))
+	assert.Equal(t, agentIP, receivedHeaders.Get("X-Real-IP"))
 }
 
 func TestSendPlain_NoHashKey(t *testing.T) {
@@ -320,13 +322,15 @@ func TestSendPlain_NoHashKey(t *testing.T) {
 
 	client := &http.Client{}
 	buf := bytes.NewBufferString("test data")
+	agentIP := "127.0.0.1"
 
-	sendPlain(client, server.URL, "", buf)
+	sendPlain(client, server.URL, "", buf, agentIP)
 
 	assert.True(t, requestReceived)
 	assert.Equal(t, "application/json", receivedHeaders.Get("Content-Type"))
 	assert.Equal(t, "gzip", receivedHeaders.Get("Content-Encoding"))
 	assert.Empty(t, receivedHeaders.Get("HashSHA256"))
+	assert.Equal(t, agentIP, receivedHeaders.Get("X-Real-IP"))
 }
 
 func TestSendEncrypted(t *testing.T) {
@@ -347,13 +351,15 @@ func TestSendEncrypted(t *testing.T) {
 	client := &http.Client{}
 	buf := bytes.NewBufferString("test data")
 	hashkey := "secret_key"
+	agentIP := "127.0.0.1"
 
-	sendEncrypted(client, server.URL, hashkey, buf, &privateKey.PublicKey)
+	sendEncrypted(client, server.URL, hashkey, buf, &privateKey.PublicKey, agentIP)
 
 	assert.True(t, requestReceived)
 	assert.Equal(t, "application/octet-stream", receivedHeaders.Get("Content-Type"))
 	assert.Equal(t, "gzip", receivedHeaders.Get("Content-Encoding"))
 	assert.NotEmpty(t, receivedHeaders.Get("HashSHA256"))
+	assert.Equal(t, agentIP, receivedHeaders.Get("X-Real-IP"))
 }
 
 func TestSendEncrypted_NoHashKey(t *testing.T) {
@@ -372,13 +378,15 @@ func TestSendEncrypted_NoHashKey(t *testing.T) {
 
 	client := &http.Client{}
 	buf := bytes.NewBufferString("test data")
+	agentIP := "127.0.0.1"
 
-	sendEncrypted(client, server.URL, "", buf, &privateKey.PublicKey)
+	sendEncrypted(client, server.URL, "", buf, &privateKey.PublicKey, agentIP)
 
 	assert.True(t, requestReceived)
 	assert.Equal(t, "application/octet-stream", receivedHeaders.Get("Content-Type"))
 	assert.Equal(t, "gzip", receivedHeaders.Get("Content-Encoding"))
 	assert.Empty(t, receivedHeaders.Get("HashSHA256"))
+	assert.Equal(t, agentIP, receivedHeaders.Get("X-Real-IP"))
 }
 
 func TestMetricWorker(t *testing.T) {

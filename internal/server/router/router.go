@@ -10,7 +10,7 @@ import (
 )
 
 // NewRouter creates a router with a handlers layout.
-func NewRouter(s storage.Storage) chi.Router {
+func NewRouter(s storage.Storage, trustedCIDR string) chi.Router {
 	r := chi.NewRouter()
 	r.Route("/", func(r chi.Router) {
 		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
@@ -20,13 +20,13 @@ func NewRouter(s storage.Storage) chi.Router {
 			handlers.PingDatabase(w, r, s)
 		})
 		r.Post("/update", func(w http.ResponseWriter, r *http.Request) {
-			handlers.PostMetricJSON(w, r, s)
+			handlers.PostMetricJSON(w, r, s, trustedCIDR)
 		})
 		r.Post("/update/", func(w http.ResponseWriter, r *http.Request) {
-			handlers.PostMetricJSON(w, r, s)
+			handlers.PostMetricJSON(w, r, s, trustedCIDR)
 		})
 		r.Post("/updates/", func(w http.ResponseWriter, r *http.Request) {
-			handlers.PostMetricsJSON(w, r, s)
+			handlers.PostMetricsJSON(w, r, s, trustedCIDR)
 		})
 		r.Post("/value", func(w http.ResponseWriter, r *http.Request) {
 			handlers.GetMetricJSON(w, r, s)

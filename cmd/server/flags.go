@@ -37,6 +37,7 @@ func NewConfig() (*server.Config, error) {
 	databaseConnection := flag.String("d", cfg.DatabaseConnection, "Database connection string")
 	hashkey := flag.String("k", "", "Hash key")
 	cryptoKey := flag.String("crypto-key", cfg.CryptoKey, "Path to private key")
+	trustedSubnet := flag.String("t", cfg.TrustedSubnet, "Trusted subnet in CIDR (e.g. 192.168.1.0/24)")
 	_ = flag.String("c", configPath, "Path to config file (JSON)")
 
 	flag.Parse()
@@ -52,6 +53,7 @@ func NewConfig() (*server.Config, error) {
 		cfg.HashKey = *hashkey
 	}
 	cfg.CryptoKey = *cryptoKey
+	cfg.TrustedSubnet = *trustedSubnet
 
 	return cfg, nil
 }
